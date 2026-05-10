@@ -123,54 +123,63 @@ fun WelcomeWizard(
     }
     @Composable
     fun ColumnScope.Step(currentStep: Int, title: String, instruction: String, actionText: String, icon: Painter, action: () -> Unit, onSkip: (() -> Unit)? = null, onBack: (() -> Unit)? = null, content: @Composable () -> Unit = {}) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        // Progress indicator
+        Row(Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             for (i in 1..8) {
                 Box(
                     modifier = Modifier
-                        .height(4.dp)
+                        .height(6.dp)
                         .weight(1f)
-                        .padding(horizontal = 2.dp)
-                        .background(if (i <= currentStep) titleColor else textColorDim)
+                        .padding(horizontal = 4.dp)
+                        .background(
+                            if (i <= currentStep) MaterialTheme.colorScheme.primary 
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                            androidx.compose.foundation.shape.CircleShape
+                        )
                 )
             }
         }
-        Column(Modifier
-            .background(color = stepBackgroundColor)
-            .padding(16.dp)
+        
+        androidx.compose.material3.ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(title)
-            Text(instruction, style = MaterialTheme.typography.bodyLarge.merge(color = textColor))
-            Spacer(Modifier.height(8.dp))
-            content()
-        }
-        Spacer(Modifier.height(4.dp))
-        Row(
-            Modifier.fillMaxWidth().background(color = stepBackgroundColor).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            if (onBack != null) {
-                Text(
-                    "Back", 
-                    color = textColor, 
-                    modifier = Modifier.clickable { onBack() }.padding(end = 16.dp)
-                )
-            }
-            
-            Row(
-                Modifier.clickable { action() }.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(icon, null, Modifier.padding(end = 6.dp).size(32.dp), tint = textColor)
-                Text(actionText, color = textColor)
-            }
-            
-            if (onSkip != null) {
-                Text(
-                    "Skip", 
-                    color = textColorDim, 
-                    modifier = Modifier.clickable { onSkip() }.padding(start = 16.dp)
-                )
+            Column(Modifier.padding(24.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(instruction, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
+                Spacer(Modifier.height(16.dp))
+                content()
+                
+                Spacer(Modifier.height(24.dp))
+                
+                // Action Buttons
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    if (onBack != null) {
+                        androidx.compose.material3.TextButton(onClick = onBack) {
+                            Text("Back")
+                        }
+                    } else {
+                        Spacer(Modifier.weight(0.1f)) // Placeholder to maintain spacing
+                    }
+                    
+                    if (onSkip != null) {
+                        androidx.compose.material3.TextButton(onClick = onSkip) {
+                            Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    
+                    Spacer(Modifier.weight(1f))
+                    
+                    androidx.compose.material3.FilledTonalButton(onClick = action) {
+                        Icon(icon, null, Modifier.padding(end = 8.dp).size(20.dp))
+                        Text(actionText)
+                    }
+                }
             }
         }
     }
