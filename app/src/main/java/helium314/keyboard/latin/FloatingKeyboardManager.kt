@@ -78,33 +78,11 @@ class FloatingKeyboardManager(private val context: Context, private val latinIME
     fun show() {
         if (!canDrawOverlays() || isFloating) return
 
-        val inputView = latinIME.mInputView ?: run {
-            Log.w(TAG, "show(): mInputView is null")
-            return
-        }
-
-        val mainKeyboardFrame = inputView.findViewById<View>(R.id.main_keyboard_frame) ?: run {
-            Log.w(TAG, "show(): main_keyboard_frame not found")
-            return
-        }
-
-        // Save original parent info so we can restore later
-        val parent = mainKeyboardFrame.parent as? ViewGroup ?: return
-        savedParent = parent
-        savedLayoutParams = mainKeyboardFrame.layoutParams
-        savedParentIndex = parent.indexOfChild(mainKeyboardFrame)
-
         windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
         // Calculate the floating keyboard width
         val dm = context.resources.displayMetrics
         val floatingWidth = (dm.widthPixels * FLOATING_WIDTH_FRACTION).toInt()
-
-        // Set the floating width override so keyboard keys re-measure at this width
-        ResourceUtils.setFloatingKeyboardWidth(floatingWidth)
-
-        // Force keyboard reload so keys re-measure at the new width
-        KeyboardSwitcher.getInstance().reloadKeyboard()
 
         // Get theme colors
         val colors = Settings.getValues().mColors
@@ -149,17 +127,7 @@ class FloatingKeyboardManager(private val context: Context, private val latinIME
             outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         }
 
-        // Reparent: remove keyboard frame from InputView
-        parent.removeView(mainKeyboardFrame)
-
-        // Set keyboard frame layout params for the overlay — MATCH the floating width
-        mainKeyboardFrame.layoutParams = LinearLayout.LayoutParams(
-            floatingWidth,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-
         contentContainer.addView(headerBar)
-        contentContainer.addView(mainKeyboardFrame)
         overlayRoot!!.addView(contentContainer)
 
         // Calculate window position
@@ -193,20 +161,18 @@ class FloatingKeyboardManager(private val context: Context, private val latinIME
             windowManager?.addView(overlayRoot, windowParams)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add overlay view", e)
-            // Restore keyboard to original parent on failure
-            contentContainer.removeView(mainKeyboardFrame)
-            mainKeyboardFrame.layoutParams = savedLayoutParams
-            ResourceUtils.setFloatingKeyboardWidth(0)
-            KeyboardSwitcher.getInstance().reloadKeyboard()
-            if (savedParentIndex >= 0 && savedParentIndex <= parent.childCount) {
-                parent.addView(mainKeyboardFrame, savedParentIndex, savedLayoutParams)
-            } else {
-                parent.addView(mainKeyboardFrame, savedLayoutParams)
-            }
+            overlayRoot = null
             return
         }
 
         isFloating = true
+
+        // Set the floating width override so keyboard keys re-measure at this width
+        ResourceUtils.setFloatingKeyboardWidth(floatingWidth)
+
+        // Force keyboard reload so keys re-measure at the new width
+        // This will trigger onInputViewRecreated which reparents the NEW keyboard into our overlay
+        KeyboardSwitcher.getInstance().reloadKeyboard()
 
         // Hide the IME window so the bottom nav bar goes away
         latinIME.onFloatingKeyboardShown()
