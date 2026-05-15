@@ -61,6 +61,7 @@ import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 import helium314.keyboard.settings.SettingsWithoutKey
+import helium314.keyboard.latin.chirp.settings.ChirpPreferences
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
 
@@ -493,6 +494,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             rebuildToolbarKeys()
             // Update visibility with auto-hide logic
             setToolbarVisibility(isToolbarManuallyOpen, false)
+        } else if (key == ChirpPreferences.KEY_ENABLED) {
+            updateVoiceKey()
         }
     }
 
@@ -741,7 +744,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun updateVoiceKey() {
-        val show = Settings.getValues().mShowsVoiceInputKey
+        val show = Settings.getValues().mShowsVoiceInputKey || ChirpPreferences(context).isVoiceEnabled()
         toolbar.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = show
         pinnedKeys.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = show
     }

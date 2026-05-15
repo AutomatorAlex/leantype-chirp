@@ -81,6 +81,7 @@ import helium314.keyboard.latin.utils.SubtypeLocaleUtils;
 import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeState;
 import helium314.keyboard.latin.utils.ToolbarMode;
+import helium314.keyboard.latin.chirp.ChirpVoiceController;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
 
@@ -184,6 +185,7 @@ public class LatinIME extends InputMethodService implements
     private final ClipboardHistoryManager mClipboardHistoryManager = new ClipboardHistoryManager(this);
 
     private FloatingKeyboardManager mFloatingKeyboardManager;
+    private ChirpVoiceController mChirpVoiceController;
 
     public FloatingKeyboardManager getFloatingKeyboardManager() {
         return mFloatingKeyboardManager;
@@ -553,6 +555,7 @@ public class LatinIME extends InputMethodService implements
         loadSettings();
         mClipboardHistoryManager.onCreate();
         mHandler.onCreate();
+        mChirpVoiceController = new ChirpVoiceController(this);
 
         // Register to receive ringer mode change.
         final IntentFilter filter = new IntentFilter();
@@ -703,6 +706,9 @@ public class LatinIME extends InputMethodService implements
     public void onDestroy() {
         if (mFloatingKeyboardManager != null) {
             mFloatingKeyboardManager.destroy();
+        }
+        if (mChirpVoiceController != null) {
+            mChirpVoiceController.destroy();
         }
         mClipboardHistoryManager.onDestroy();
         mDictionaryFacilitator.closeDictionaries();
@@ -1126,6 +1132,9 @@ public class LatinIME extends InputMethodService implements
     }
 
     private void cleanupInternalStateForFinishInput() {
+        if (mChirpVoiceController != null) {
+            mChirpVoiceController.cancel();
+        }
         // Remove pending messages related to update suggestions
         mHandler.cancelUpdateSuggestionStrip();
         // Should do the following in onFinishInputInternal but until JB MR2 it's not
@@ -1512,7 +1521,12 @@ public class LatinIME extends InputMethodService implements
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
+            if (mChirpVoiceController != null && mChirpVoiceController.isEnabled()) {
+                mChirpVoiceController.toggleRecording();
+                return;
+            }
             mRichImm.switchToShortcutIme(this);
+            return;
         }
         final InputTransaction completeInputTransaction = mInputLogic.onCodeInput(mSettings.getCurrent(), event,
                 mKeyboardSwitcher.getKeyboardShiftMode(), mHandler);

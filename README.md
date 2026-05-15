@@ -1,162 +1,106 @@
-# LeanType
+# LeanType Chirp
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/leantype_banner_dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/leantype_banner_light.svg">
-  <img alt="LeanType Banner" src="docs/images/leantype_banner_light.svg">
-</picture>
+<p align="center">
+  <img src="docs/banner.svg" width="100%" alt="LeanType Chirp banner" />
+</p>
 
-[![Download](https://img.shields.io/github/v/release/LeanBitLab/HeliboardL?label=Download&style=for-the-badge&color=7C4DFF)](https://github.com/LeanBitLab/HeliboardL/releases/latest) [![Downloads](https://img.shields.io/github/downloads/LeanBitLab/HeliboardL/total?style=for-the-badge&color=7C4DFF&label=Downloads)](https://github.com/LeanBitLab/HeliboardL/releases) [![Stars](https://img.shields.io/github/stars/LeanBitLab/HeliboardL?style=for-the-badge&color=7C4DFF)](https://github.com/LeanBitLab/HeliboardL/stargazers)
+**LeanType Chirp** is a fork of [LeanType](https://github.com/LeanBitLab/HeliboardL), which is a fork of [HeliBoard](https://github.com/Helium314/HeliBoard), [OpenBoard](https://github.com/openboard-team/openboard), and the AOSP LatinIME keyboard.
 
-**LeanType** is a fork of [HeliBoard](https://github.com/Helium314/HeliBoard) - a privacy-conscious and customizable open-source keyboard based on AOSP/OpenBoard.
+This fork adds optional **OpenRouter Chirp speech-to-text** directly to the LeanType microphone key:
 
-This fork adds **optional AI-powered features** using Gemini, Groq, and OpenAI-compatible APIs, offering a hybrid experience: a private, offline core with opt-in cloud intelligence.
+- tap mic once to start recording
+- tap mic again to stop and transcribe
+- transcription inserts into the current text field
+- no auxiliary IME
+- no keyboard switching
+- no background listening
 
+Audio is sent to OpenRouter **only when you explicitly tap the mic key** and stop recording. The core keyboard remains local/private unless you opt into network-backed AI features.
 
+## Lineage
 
-## What's New in LeanType
+```text
+LeanType Chirp → LeanType → HeliBoard → OpenBoard → AOSP LatinIME
+```
 
-- **[🤖 Multi-Provider AI](docs/FEATURES.md#supported-ai-providers)** - Proofread using **Gemini**, **Groq** (Llama 3, Mixtral), or **OpenAI-compatible** providers.
-- **[🛡️ Offline AI](docs/FEATURES.md#5-offline-proofreading-privacy-focused)** - Private, on-device proofreading and translation using ONNX models (Offline build only).
-- **🌐 AI Translation** - Translate selected text directly using your chosen AI provider.
-- **[🧠 Custom AI Keys](docs/FEATURES.md#4-custom-ai-keys--keywords)** - Assign custom prompts and personas (#editor, #proofread) to 10 customizable toolbar keys.
-- **🪟 Floating Keyboard** - Detach the keyboard into a draggable window for seamless multitasking.
-- **⌨️ Dual Toolbar / Split Suggestions** - Option to split suggestions and toolbar for easier access.
-- **🖱️ Touchpad Mode** - Swipe spacebar up to toggle touchpad; custom sensitivity controls.
-- **🎨 Modern UI** - "Squircle" key backgrounds, refined icons, and polished aesthetics.
-- **🔄 Google Dictionary Import** - Easily import your personal dictionary words.
-- **⚙️ Enhanced Customization** - Force auto-capitalization toggle, reorganized settings, and more.
-- **🕵️ Clear Incognito Mode** - Distinct "Hat & Glasses" icon for clear visibility.
-- **🔍 Clipboard Search & Undo** - Search through your clipboard history directly from the toolbar, and undo accidental item deletions.
-- **📸 Screenshot Suggestion & Clipboard** - Suggests recently taken screenshots for quick sharing via the suggestion strip and saves them to your clipboard history.
-- **🔎 Emoji Search** - Search for emojis by name. *Requires loading an Emoji Dictionary.*
-- **🔒 Privacy Choices** - Choose **Standard** (Opt-in AI), **Offline** (Hard-disabled network, offline model load), or **Offline Lite** (Minimalist, no AI) versions.
+## Features
 
+- Direct OpenRouter Chirp STT via the built-in mic key
+- OpenRouter model selection, defaulting to `google/chirp-3`
+- Credential-protected OpenRouter API key storage
+- Existing LeanType AI features: Gemini, Groq, OpenAI-compatible proofread/translation
+- Existing HeliBoard/OpenBoard features: custom layouts, themes, clipboard, multilingual typing, glide typing, emoji, one-handed/split/floating keyboard modes
 
+## Setup: Chirp Voice Input
 
-## Screenshots
+1. Install the **Standard** build.
+2. Open **LeanType Chirp Settings → AI Integration**.
+3. Enable **OpenRouter Chirp voice input**.
+4. Enter your [OpenRouter API key](https://openrouter.ai/settings/keys).
+5. Leave model as `google/chirp-3` or enter another OpenRouter STT model.
+6. Open any normal text field.
+7. Tap the mic key once to record.
+8. Tap the mic key again to stop, transcribe, and insert text.
 
-<table>
-  <tr>
-    <td><img src="docs/images/1.png" height="500" alt="Screenshot 1"/></td>
-    <td><img src="docs/images/2.png" height="500" alt="Screenshot 2"/></td>
-    <td><img src="docs/images/3.png" height="500" alt="Screenshot 3"/></td>
-    <td><img src="docs/images/4.png" height="500" alt="Screenshot 4"/></td>
-    <td><img src="docs/images/5.png" height="500" alt="Screenshot 5"/></td>
-    <td><img src="docs/images/6.png" height="500" alt="Screenshot 6"/></td>
-  </tr>
-</table>
+See [CHIRP_VOICE.md](CHIRP_VOICE.md) for detailed voice setup and privacy notes.
 
+## Privacy
 
-## Download
+LeanType Chirp does not add telemetry or background collection.
 
-<a href="https://github.com/LeanBitLab/HeliboardL/releases/latest">
-  <img alt="Get it on GitHub" src="docs/images/get-it-on-github.png" height="80">
-</a>
-<a href="https://f-droid.org/en/packages/com.leanbitlab.leantype/index.html">
-  <img alt="Get it on F-Droid" src="docs/images/get-it-on-fdroid.png" height="80">
-</a>
+Network use is user-triggered:
 
-### 📦 Choose Your Version
+- **Chirp STT:** audio is recorded locally, encoded as WAV/base64, then sent to OpenRouter’s audio transcription endpoint only after you stop recording.
+- **AI proofreading/translation:** selected text is sent only when you press the relevant AI action.
 
-#### 1. Standard Version (`-standard-release.apk`)
-*   **Features:** Full suite including **AI Proofreading**, **AI Translation**, and **Gesture Library Downloader**.
-*   **Permissions:** Request `INTERNET` permission (used *only* when you explicitly use AI features).
-*   **Setup:** Use the built-in downloader for Gesture Typing. Configure AI keys in Settings.
+API keys are stored in Android credential-protected app storage. Review [SECURITY.md](SECURITY.md) for details.
 
-#### 2. Offline Version (`-offline-release.apk`)
-*   **Features:** All UI/UX enhancements and **Offline Neural Proofreading** (ONNX).
-*   **Permissions:** **NO INTERNET PERMISSION**. Guaranteed at OS level.
-*   **Best For:** Privacy purists.
-*   **Manual Setup Required:**
-    *   **Gesture Typing:** [Download library manually](https://github.com/erkserkserks/openboard/tree/46fdf2b550035ca69299ce312fa158e7ade36967/app/src/main/jniLibs) and load via *Settings > Gesture typing*.
-    *   **Offline AI:** Download ONNX models and load via *Settings > AI Integration*. 👉 **[See Offline Setup Instructions](docs/FEATURES.md#3-offline-proofreading-privacy-focused)**
+## Build
 
-#### 3. Offline Lite Version (`-offlinelite-release.apk`)
-*   **Features:** All UI/UX enhancements but **NO AI FEATURES**.
-*   **Permissions:** **NO INTERNET PERMISSION**. Guaranteed at OS level.
-*   **Best For:** Minimalists who want a modern keyboard without any AI components (~20MB size).
-*   **Manual Setup Required:**
-    *   **Gesture Typing:** [Download library manually](https://github.com/erkserkserks/openboard/tree/46fdf2b550035ca69299ce312fa158e7ade36967/app/src/main/jniLibs) and load via *Settings > Gesture typing*.
+Requirements:
 
-## Original HeliBoard Features
+- Android SDK 35+
+- JDK 17
+- Gradle wrapper from this repo
 
-<ul>
-  <li>Add dictionaries for suggestions and spell check</li>
-  <li>Customize keyboard themes (style, colors and background image)</li>
-  <li>Customize keyboard layouts</li>
-  <li>Multilingual typing</li>
-  <li>Glide typing (<i>requires library</i>)</li>
-  <li>Clipboard history</li>
-  <li>One-handed mode</li>
-  <li>Split keyboard</li>
-  <li>Number pad</li>
-  <li>Backup and restore settings</li>
-</ul>
+Debug build:
 
-For original feature documentation, visit the [HeliBoard Wiki](https://github.com/Helium314/HeliBoard/wiki).
+```bash
+./gradlew :app:assembleStandardDebug
+```
 
-## Setup
+APK output:
 
-### AI Features Setup
+```text
+app/build/outputs/apk/standard/debug/
+```
 
-LeanType supports multiple AI providers: **Google Gemini**, **Groq**, and **OpenAI-compatible** (OpenRouter, HuggingFace, etc.).
+Release build:
 
-👉 **[Read the Full AI Setup & Features Guide](docs/FEATURES.md)**
-
-**Quick Start:**
-1.  Get a free key from [Google AI Studio](https://aistudio.google.com/apikey) (Gemini) or [Groq Console](https://console.groq.com/keys) (Groq).
-2.  Copy the API key.
-3.  Go to **Settings → AI Integration → Set AI Provider**.
-4.  Select your provider and paste the API Token.
-5.  Select Model and target language
-
-> [!IMPORTANT]
-> **Privacy**: Your input data is sent to the configured provider.
-> 👉 **[View Privacy Policies for Providers](docs/FEATURES.md#supported-ai-providers)**
+```bash
+./gradlew :app:assembleStandardRelease
+```
 
 ## Contributing
 
-For issues specific to LeanType features, please open an issue in this repository.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-For issues with core HeliBoard functionality, please report to the [original HeliBoard repository](https://github.com/Helium314/HeliBoard/issues).
+Chirp-specific bugs and improvements belong in this fork. Core keyboard, layout, or dictionary issues may belong upstream in LeanType or HeliBoard.
+
+## Security
+
+Do not report vulnerabilities in public issues. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-LeanType (as a fork of HeliBoard/OpenBoard) is licensed under **GNU General Public License v3.0**.
+LeanType Chirp modifications are licensed under GPL-3.0, matching LeanType/HeliBoard/OpenBoard lineage.
 
-See [LICENSE](/LICENSE) file.
+See [LICENSE](LICENSE).
 
 ## Credits
 
-### Original Projects
-- **[HeliBoard](https://github.com/Helium314/HeliBoard)** by Helium314 - The excellent keyboard this fork is based on
+- [LeanType](https://github.com/LeanBitLab/HeliboardL) by LeanBitLab
+- [HeliBoard](https://github.com/Helium314/HeliBoard) by Helium314 and contributors
 - [OpenBoard](https://github.com/openboard-team/openboard)
-- [AOSP Keyboard](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/)
-- All [HeliBoard Contributors](https://github.com/Helium314/HeliBoard/graphs/contributors)
-
-### LeanType
-- Built with ❤️ by [LeanBitLab](https://github.com/LeanBitLab)
-
-## 🛡️ LeanBitLab Ecosystem
-
-Check out our other projects:
-👉 **[LeanBitLab Projects](https://github.com/LeanBitLab#-current-projects)**
-
----
-
-## Support the Development
-
-Building and maintaining privacy-focused, offline AI apps takes time and resources (test devices, server costs, etc.).
-
-If you love LeanType, please consider supporting the project!
-
-<a href="https://github.com/sponsors/LeanBitLab">
-  <img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86" width="150" alt="Sponsor on GitHub"/>
-</a>
-
-Your support keeps the code **100% Free and Open Source**.
-
----
-
-*LeanType • Privacy-focused keyboard with AI enhancements*
+- AOSP LatinIME keyboard
+- OpenRouter for model routing and the Chirp STT endpoint

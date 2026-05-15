@@ -533,6 +533,63 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
             )
         }
     },
+    Setting(context, SettingsWithoutKey.CHIRP_VOICE_ENABLED, R.string.chirp_voice_enable_title, R.string.chirp_voice_enable_summary) {
+        val ctx = LocalContext.current
+        val chirpPrefs = remember { helium314.keyboard.latin.chirp.settings.ChirpPreferences(ctx) }
+        SwitchPreference(it, chirpPrefs.isVoiceEnabled()) { enabled ->
+            chirpPrefs.setVoiceEnabled(enabled)
+        }
+    },
+    Setting(context, SettingsWithoutKey.CHIRP_API_KEY, R.string.chirp_api_key_title, R.string.chirp_api_key_summary) { setting ->
+        var showDialog by rememberSaveable { mutableStateOf(false) }
+        val ctx = LocalContext.current
+        val chirpPrefs = remember { helium314.keyboard.latin.chirp.settings.ChirpPreferences(ctx) }
+        Preference(
+            name = setting.title,
+            description = if (chirpPrefs.getApiKey().isNotBlank()) "Key set" else stringResource(R.string.chirp_api_key_summary),
+            onClick = { showDialog = true }
+        )
+        if (showDialog) {
+            TextInputDialog(
+                onDismissRequest = { showDialog = false },
+                textInputLabel = { Text("sk-or-v1-...") },
+                initialText = chirpPrefs.getApiKey(),
+                onConfirmed = { chirpPrefs.setApiKey(it) },
+                title = { Text(stringResource(R.string.chirp_api_key_title)) },
+                neutralButtonText = if (chirpPrefs.getApiKey().isNotBlank()) stringResource(R.string.delete) else null,
+                onNeutral = { chirpPrefs.setApiKey("") },
+                extraContent = {
+                    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                    TextButton(
+                        onClick = { uriHandler.openUri("https://openrouter.ai/settings/keys") }
+                    ) {
+                        Text("Get API key")
+                    }
+                }
+            )
+        }
+    },
+    Setting(context, SettingsWithoutKey.CHIRP_MODEL, R.string.chirp_model_title, R.string.chirp_model_summary) { setting ->
+        var showDialog by rememberSaveable { mutableStateOf(false) }
+        val ctx = LocalContext.current
+        val chirpPrefs = remember { helium314.keyboard.latin.chirp.settings.ChirpPreferences(ctx) }
+        Preference(
+            name = setting.title,
+            description = chirpPrefs.getModel(),
+            onClick = { showDialog = true }
+        )
+        if (showDialog) {
+            TextInputDialog(
+                onDismissRequest = { showDialog = false },
+                textInputLabel = { Text("google/chirp-3") },
+                initialText = chirpPrefs.getModel(),
+                onConfirmed = { chirpPrefs.setModel(it) },
+                title = { Text(stringResource(R.string.chirp_model_title)) },
+                neutralButtonText = if (chirpPrefs.getModel() != helium314.keyboard.latin.chirp.settings.ChirpPreferences.DEFAULT_MODEL) stringResource(R.string.button_default) else null,
+                onNeutral = { chirpPrefs.setModel(helium314.keyboard.latin.chirp.settings.ChirpPreferences.DEFAULT_MODEL) }
+            )
+        }
+    },
     if (BuildConfig.FLAVOR == "standard") Setting(context, SettingsWithoutKey.CUSTOM_AI_KEYS, R.string.custom_ai_keys_title, R.string.custom_ai_keys_summary) {
         Preference(
             name = it.title,

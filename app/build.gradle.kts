@@ -19,7 +19,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.leanbitlab.leantype"
+        applicationId = "com.leantypechirp.keyboard"
         minSdk = 21
         targetSdk = 35
         versionCode = 3707
@@ -81,7 +81,6 @@ android {
             // and for better performance in case users want to install a debug APK
             isMinifyEnabled = false
             isJniDebuggable = false
-            applicationIdSuffix = ".debug"
         }
         create("runTests") { // build variant for running tests on CI that skips tests known to fail
             isMinifyEnabled = false
@@ -92,7 +91,6 @@ android {
             isMinifyEnabled = false
             isJniDebuggable = false
             signingConfig = signingConfigs.getByName("debug")
-            applicationIdSuffix = ".debug"
         }
         // base.archivesBaseName = "HeliboardL_" + defaultConfig.versionName // replaced by dynamic naming below
         applicationVariants.all {
@@ -106,7 +104,7 @@ android {
             if (number.isNotEmpty()) {
                 outputs.all {
                     val output = this as? com.android.build.gradle.api.ApkVariantOutput
-                    output?.outputFileName = "$number-LeanType_${defaultConfig.versionName}-${flavor}-${buildType.name}.apk"
+                    output?.outputFileName = "$number-LeanType-Chirp_${defaultConfig.versionName}-${flavor}-${buildType.name}.apk"
                 }
             }
         }
@@ -184,6 +182,10 @@ dependencies {
 
     // kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // network
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // compose
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")

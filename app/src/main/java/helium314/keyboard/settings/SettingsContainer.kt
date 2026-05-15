@@ -109,4 +109,7 @@ object SettingsWithoutKey {
     const val GROQ_MODEL = "groq_model"
     const val CUSTOM_AI_KEYS = "custom_ai_keys"
     const val OFFLINE_KEEP_MODEL_LOADED = "offline_keep_model_loaded"
+    const val CHIRP_VOICE_ENABLED = "chirp_voice_enabled"
+    const val CHIRP_API_KEY = "chirp_api_key"
+    const val CHIRP_MODEL = "chirp_model"
 }
