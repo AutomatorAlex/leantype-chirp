@@ -6,7 +6,16 @@
 
 <p align="center">
   <a href="https://github.com/AutomatorAlex/leantype-chirp/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/AutomatorAlex/leantype-chirp?style=for-the-badge&color=7C4DFF&label=Download%20APK" height="32" /></a>
-  <a href="obtainium://add/https://github.com/AutomatorAlex/leantype-chirp"><img alt="Get it on Obtainium" src="https://img.shields.io/badge/Obtainium-Get%20it-brightgreen?style=for-the-badge" height="32" /></a>
+  <a href="https://github.com/AutomatorAlex/leantype-chirp/releases/latest"><img alt="Get it on Obtainium" src="https://img.shields.io/badge/Obtainium-Add%20repo%20URL-brightgreen?style=for-the-badge" height="32" /></a>
+</p>
+
+<p align="center">
+<sup><b>GitHub Releases</b> — download the APK directly.<br/>
+<b>Obtainium</b> — add <code>https://github.com/AutomatorAlex/leantype-chirp</code> as an app source.</sup>
+</p>
+
+<p align="center">
+<sup>Install via <b>GitHub Releases</b> (download APK directly) or <b>Obtainium</b> — add<br/><code>https://github.com/AutomatorAlex/leantype-chirp</code> as an app source.</sup>
 </p>
 
 **LeanType Chirp** is a fork of [LeanType](https://github.com/LeanBitLab/HeliboardL), which is a fork of [HeliBoard](https://github.com/Helium314/HeliBoard), [OpenBoard](https://github.com/openboard-team/openboard), and the AOSP LatinIME keyboard.
