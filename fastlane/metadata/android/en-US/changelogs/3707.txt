@@ -1,5 +1,0 @@
-* Optimize performance (caching and IPC reductions)
-* Fixed many bugs
-* Add Mint and Pink theme
-* Update README badges
-

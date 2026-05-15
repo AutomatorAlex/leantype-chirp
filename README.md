@@ -7,7 +7,6 @@
 <p align="center">
   <a href="https://github.com/AutomatorAlex/leantype-chirp/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/AutomatorAlex/leantype-chirp?style=for-the-badge&color=7C4DFF&label=Download%20APK" height="32" /></a>
   <a href="obtainium://add/https://github.com/AutomatorAlex/leantype-chirp"><img alt="Get it on Obtainium" src="https://img.shields.io/badge/Obtainium-Get%20it-brightgreen?style=for-the-badge" height="32" /></a>
-  <a href="https://github.com/AutomatorAlex/leantype-chirp/blob/main/com.leantypechirp.keyboard.yml"><img alt="F-Droid" src="https://img.shields.io/badge/F--Droid-Ready%20to%20Submit-blue?style=for-the-badge" height="32" /></a>
 </p>
 
 **LeanType Chirp** is a fork of [LeanType](https://github.com/LeanBitLab/HeliboardL), which is a fork of [HeliBoard](https://github.com/Helium314/HeliBoard), [OpenBoard](https://github.com/openboard-team/openboard), and the AOSP LatinIME keyboard.

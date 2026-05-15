@@ -1,1 +1,0 @@
-Privacy-first keyboard with OpenRouter Chirp STT — tap mic to record, tap again to transcribe. No IME switching.
