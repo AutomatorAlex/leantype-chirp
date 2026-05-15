@@ -749,6 +749,16 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         pinnedKeys.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = show
     }
 
+    fun setVoiceKeyRecording(recording: Boolean) {
+        if (recording) {
+            toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.setColorFilter(android.graphics.Color.RED, android.graphics.PorterDuff.Mode.SRC_IN)
+            pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.setColorFilter(android.graphics.Color.RED, android.graphics.PorterDuff.Mode.SRC_IN)
+        } else {
+            toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.clearColorFilter()
+            pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.clearColorFilter()
+        }
+    }
+
     fun showTranslateLanguageSelector() {
         // Hide other views
         suggestionsStrip.isVisible = false

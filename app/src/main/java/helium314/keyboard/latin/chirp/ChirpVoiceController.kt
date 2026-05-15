@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.util.Base64
@@ -24,10 +25,20 @@ class ChirpVoiceController(private val ime: LatinIME) {
         private const val TAG = "ChirpVoiceController"
     }
 
+    interface StateListener {
+        fun onStateChanged(state: State)
+    }
+
     enum class State { IDLE, RECORDING, TRANSCRIBING }
 
     @Volatile
     private var state = State.IDLE
+
+    private var stateListener: StateListener? = null
+
+    fun setStateListener(listener: StateListener?) {
+        stateListener = listener
+    }
 
     private val prefs = ChirpPreferences(ime)
     private val recorder = AudioRecorder(ime)
@@ -35,6 +46,15 @@ class ChirpVoiceController(private val ime: LatinIME) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun isEnabled(): Boolean = prefs.isVoiceEnabled()
+
+    private fun setState(newState: State) {
+        if (state != newState) {
+            state = newState
+            stateListener?.onStateChanged(newState)
+        }
+    }
+
+    fun getState(): State = state
 
     fun toggleRecording(): Boolean {
         when (state) {
@@ -52,43 +72,21 @@ class ChirpVoiceController(private val ime: LatinIME) {
                         return false
                     }
                 }
-                state = State.RECORDING
+                setState(State.RECORDING)
                 recorder.start()
                 toast("🎙 Listening… tap mic again to stop")
+                scope.launch {
+                    while (recorder.isRecordingActive() && state == State.RECORDING) {
+                        delay(200)
+                    }
+                    if (state == State.RECORDING) {
+                        stopAndTranscribe()
+                    }
+                }
                 return true
             }
             State.RECORDING -> {
-                state = State.TRANSCRIBING
-                toast("Transcribing…")
-                scope.launch {
-                    val pcmData = withContext(Dispatchers.IO) { recorder.stop() }
-                    if (pcmData.isEmpty()) {
-                        toast("Chirp voice error: no audio captured")
-                        state = State.IDLE
-                        return@launch
-                    }
-                    val wavData = withContext(Dispatchers.IO) { WavEncoder.encode(pcmData) }
-                    val base64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
-                    val model = prefs.getModel()
-                    val apiKey = prefs.getApiKey()
-
-                    val result = OpenRouterSttClient.transcribe(base64, apiKey, model)
-                    mainHandler.post {
-                        result.onSuccess { text ->
-                            val ic = ime.currentInputConnection
-                            if (ic != null) {
-                                ic.commitText(text, 1)
-                                toast("Transcribed ${text.length} chars")
-                            } else {
-                                toast("Chirp voice error: no input connection")
-                            }
-                        }.onFailure { e ->
-                            toast("Chirp voice error: ${e.message}")
-                            Log.e(TAG, "Transcription failed", e)
-                        }
-                        state = State.IDLE
-                    }
-                }
+                stopAndTranscribe()
                 return true
             }
             State.TRANSCRIBING -> {
@@ -98,10 +96,45 @@ class ChirpVoiceController(private val ime: LatinIME) {
         }
     }
 
+    private fun stopAndTranscribe() {
+        if (state != State.RECORDING) return
+        setState(State.TRANSCRIBING)
+        toast("Transcribing…")
+        scope.launch {
+            val pcmData = withContext(Dispatchers.IO) { recorder.stop() }
+            if (pcmData.isEmpty()) {
+                toast("Chirp voice error: no audio captured")
+                setState(State.IDLE)
+                return@launch
+            }
+            val wavData = withContext(Dispatchers.IO) { WavEncoder.encode(pcmData) }
+            val base64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
+            val model = prefs.getModel()
+            val apiKey = prefs.getApiKey()
+
+            val result = OpenRouterSttClient.transcribe(base64, apiKey, model)
+            mainHandler.post {
+                result.onSuccess { text ->
+                    val ic = ime.currentInputConnection
+                    if (ic != null) {
+                        ic.commitText(text, 1)
+                        toast("Transcribed ${text.length} chars")
+                    } else {
+                        toast("Chirp voice error: no input connection")
+                    }
+                }.onFailure { e ->
+                    toast("Chirp voice error: ${e.message}")
+                    Log.e(TAG, "Transcription failed", e)
+                }
+                state = State.IDLE
+            }
+        }
+    }
+
     fun cancel() {
         if (state == State.RECORDING) {
             scope.launch(Dispatchers.IO) { recorder.stop() }
-            state = State.IDLE
+            setState(State.IDLE)
             toast("Voice input cancelled")
         }
     }

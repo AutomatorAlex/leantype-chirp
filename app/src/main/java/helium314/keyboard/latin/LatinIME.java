@@ -556,6 +556,11 @@ public class LatinIME extends InputMethodService implements
         mClipboardHistoryManager.onCreate();
         mHandler.onCreate();
         mChirpVoiceController = new ChirpVoiceController(this);
+        mChirpVoiceController.setStateListener(newState -> {
+            if (mSuggestionStripView != null) {
+                mSuggestionStripView.setVoiceKeyRecording(newState == ChirpVoiceController.State.RECORDING);
+            }
+        });
 
         // Register to receive ringer mode change.
         final IntentFilter filter = new IntentFilter();
