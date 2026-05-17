@@ -1,0 +1,63 @@
+name: hermes-pr-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: hermes-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Hermes Gateway
+        env:
+          HERMES_SECRET: ${{ secrets.HERMES_WEBHOOK_SECRET_PR }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HTML_URL: ${{ github.event.pull_request.html_url }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          REPO_FULL_NAME: ${{ github.repository }}
+          REPO_CLONE_URL: ${{ github.event.pull_request.head.repo.clone_url }}
+          SENDER_LOGIN: ${{ github.actor }}
+        run: |
+          HERMES_TS="$(date +%s)"
+          BODY=$(jq -n \
+            --arg action "$PR_ACTION" \
+            --argjson number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg html_url "$PR_HTML_URL" \
+            --argjson draft "$PR_DRAFT" \
+            --arg head_ref "$PR_HEAD_REF" \
+            --arg head_sha "$PR_HEAD_SHA" \
+            --arg base_ref "$PR_BASE_REF" \
+            --arg full_name "$REPO_FULL_NAME" \
+            --arg clone_url "$REPO_CLONE_URL" \
+            --arg login "$SENDER_LOGIN" \
+            '{
+              action: $action,
+              pull_request: {
+                number: $number,
+                title: $title,
+                html_url: $html_url,
+                draft: $draft,
+                head: { ref: $head_ref, sha: $head_sha },
+                base: { ref: $base_ref }
+              },
+              repository: { full_name: $full_name, clone_url: $clone_url },
+              sender: { login: $login }
+            }')
+          HERMES_SIG="$(printf '%s.%s' "$HERMES_TS" "$BODY" | openssl dgst -sha256 -hmac "$HERMES_SECRET" | awk '{print $2}')"
+          curl -s -X POST \
+            "https://hermes-gw.everydayworkflows.com/webhooks/github-pr" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: pull_request" \
+            -H "X-Hermes-Signature: $HERMES_SIG" \
+            -H "X-Hermes-Timestamp: $HERMES_TS" \
+            -d "$BODY"
