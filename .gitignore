@@ -60,4 +60,6 @@ cline_docs/
 .continue/
 prompt_history.json
 chat.json
-docs/superpowers/
+docs/superpowers/.project
+.settings/
+.classpath

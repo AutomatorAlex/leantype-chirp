@@ -561,7 +561,6 @@ public class LatinIME extends InputMethodService implements
                 mSuggestionStripView.setVoiceKeyRecording(newState == ChirpVoiceController.State.RECORDING);
             }
         });
-
         // Register to receive ringer mode change.
         final IntentFilter filter = new IntentFilter();
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);

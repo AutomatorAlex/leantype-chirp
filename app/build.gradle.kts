@@ -22,8 +22,8 @@ android {
         applicationId = "com.leantypechirp.keyboard"
         minSdk = 21
         targetSdk = 35
-        versionCode = 10001
-        versionName = "1.0.1"
+        versionCode = 10004
+        versionName = "1.0.4"
 
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         
