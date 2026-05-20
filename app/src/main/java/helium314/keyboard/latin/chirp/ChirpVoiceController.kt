@@ -3,6 +3,9 @@ package helium314.keyboard.latin.chirp
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.chirp.audio.AudioRecorder
@@ -115,12 +118,18 @@ class ChirpVoiceController(private val ime: LatinIME) {
             val result = OpenRouterSttClient.transcribe(base64, apiKey, model)
             mainHandler.post {
                 result.onSuccess { text ->
+                    try {
+                        val cm = ime.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("transcribed text", text))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to copy to clipboard", e)
+                    }
                     val ic = ime.currentInputConnection
                     if (ic != null) {
                         ic.commitText(text, 1)
-                        toast("Transcribed ${text.length} chars")
+                        toast("Transcribed ${text.length} chars (copied to clipboard)")
                     } else {
-                        toast("Chirp voice error: no input connection")
+                        toast("Transcribed: \"$text\" (copied to clipboard)")
                     }
                 }.onFailure { e ->
                     toast("Chirp voice error: ${e.message}")
