@@ -68,8 +68,6 @@ android {
             isJniDebuggable = false
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
-            } else {
-                signingConfig = signingConfigs.getByName("debug")
             }
         }
         create("nouserlib") { // same as release, but does not allow the user to provide a library
