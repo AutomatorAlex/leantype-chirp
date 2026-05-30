@@ -60,39 +60,58 @@ class ChirpVoiceController(private val ime: LatinIME) {
     fun getState(): State = state
 
     fun toggleRecording(): Boolean {
+        Log.d("[DEBUG-CHIRP]", "toggleRecording() called. Current state: $state")
         when (state) {
             State.IDLE -> {
-                if (!isEnabled()) return false
+                if (!isEnabled()) {
+                    Log.d("[DEBUG-CHIRP]", "Chirp voice is disabled in preferences")
+                    return false
+                }
                 val apiKey = prefs.getApiKey()
                 if (apiKey.isBlank()) {
+                    Log.e("[DEBUG-CHIRP]", "API key is blank")
                     toast("Chirp voice error: API key not set")
                     return false
                 }
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                     val granted = ime.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                     if (!granted) {
+                        Log.e("[DEBUG-CHIRP]", "RECORD_AUDIO permission denied")
                         toast("Chirp voice error: RECORD_AUDIO permission denied")
                         return false
                     }
                 }
+                val startTime = System.currentTimeMillis()
+                var autoStopped = false
                 setState(State.RECORDING)
                 recorder.start()
                 toast("🎙 Listening… tap mic again to stop")
                 scope.launch {
+                    val maxDurationMs = AudioRecorder.MAX_RECORDING_SECONDS * 1000L
                     while (recorder.isRecordingActive() && state == State.RECORDING) {
                         delay(200)
+                        if (System.currentTimeMillis() - startTime >= maxDurationMs - 500) {
+                            autoStopped = true
+                        }
                     }
+                    Log.d("[DEBUG-CHIRP]", "Recording loop finished. isRecordingActive: ${recorder.isRecordingActive()}, state: $state, autoStopped: $autoStopped")
                     if (state == State.RECORDING) {
+                        if (autoStopped) {
+                            Log.d("[DEBUG-CHIRP]", "Auto-stopping recording due to max duration limit (50s)")
+                            toast("⏱ Max limit reached, transcribing…")
+                        }
                         stopAndTranscribe()
                     }
                 }
                 return true
             }
             State.RECORDING -> {
+                Log.d("[DEBUG-CHIRP]", "Stopping recording manually")
                 stopAndTranscribe()
                 return true
             }
             State.TRANSCRIBING -> {
+                Log.d("[DEBUG-CHIRP]", "Tap ignored: already transcribing")
                 toast("Still transcribing…")
                 return true
             }
@@ -100,42 +119,59 @@ class ChirpVoiceController(private val ime: LatinIME) {
     }
 
     private fun stopAndTranscribe() {
+        Log.d("[DEBUG-CHIRP]", "stopAndTranscribe() called. Current state: $state")
         if (state != State.RECORDING) return
         setState(State.TRANSCRIBING)
         toast("Transcribing…")
         scope.launch {
-            val pcmData = withContext(Dispatchers.IO) { recorder.stop() }
-            if (pcmData.isEmpty()) {
-                toast("Chirp voice error: no audio captured")
-                setState(State.IDLE)
-                return@launch
-            }
-            val wavData = withContext(Dispatchers.IO) { WavEncoder.encode(pcmData) }
-            val base64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
-            val model = prefs.getModel()
-            val apiKey = prefs.getApiKey()
+            try {
+                Log.d("[DEBUG-CHIRP]", "Stopping recorder and retrieving PCM data")
+                val pcmData = withContext(Dispatchers.IO) { recorder.stop() }
+                Log.d("[DEBUG-CHIRP]", "PCM data size: ${pcmData.size} bytes")
+                if (pcmData.isEmpty()) {
+                    Log.e("[DEBUG-CHIRP]", "PCM data is empty")
+                    toast("Chirp voice error: no audio captured")
+                    return@launch
+                }
+                Log.d("[DEBUG-CHIRP]", "Encoding PCM to WAV")
+                val wavData = withContext(Dispatchers.IO) { WavEncoder.encode(pcmData) }
+                Log.d("[DEBUG-CHIRP]", "WAV data size: ${wavData.size} bytes")
+                val base64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
+                Log.d("[DEBUG-CHIRP]", "Base64 payload size: ${base64.length} chars")
+                val model = prefs.getModel()
+                val apiKey = prefs.getApiKey()
 
-            val result = OpenRouterSttClient.transcribe(base64, apiKey, model)
-            mainHandler.post {
+                Log.d("[DEBUG-CHIRP]", "Sending transcription request to OpenRouter. Model: $model")
+                val result = OpenRouterSttClient.transcribe(base64, apiKey, model)
+                Log.d("[DEBUG-CHIRP]", "Transcription request completed. Success: ${result.isSuccess}")
                 result.onSuccess { text ->
+                    Log.d("[DEBUG-CHIRP]", "Transcription success. Text length: ${text.length} chars")
                     try {
                         val cm = ime.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("transcribed text", text))
+                        Log.d("[DEBUG-CHIRP]", "Copied transcribed text to clipboard")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to copy to clipboard", e)
+                        Log.e("[DEBUG-CHIRP]", "Failed to copy to clipboard", e)
                     }
                     val ic = ime.currentInputConnection
                     if (ic != null) {
+                        Log.d("[DEBUG-CHIRP]", "Committing text to input connection")
                         ic.commitText(text, 1)
                         toast("Transcribed ${text.length} chars (copied to clipboard)")
                     } else {
+                        Log.w("[DEBUG-CHIRP]", "InputConnection is null, cannot commit text")
                         toast("Transcribed: \"$text\" (copied to clipboard)")
                     }
                 }.onFailure { e ->
+                    Log.e("[DEBUG-CHIRP]", "Transcription failed with exception", e)
                     toast("Chirp voice error: ${e.message}")
-                    Log.e(TAG, "Transcription failed", e)
                 }
-                state = State.IDLE
+            } catch (e: Exception) {
+                Log.e("[DEBUG-CHIRP]", "Unexpected error during transcription flow", e)
+                toast("Chirp voice error: ${e.message}")
+            } finally {
+                Log.d("[DEBUG-CHIRP]", "Resetting state to IDLE")
+                setState(State.IDLE)
             }
         }
     }

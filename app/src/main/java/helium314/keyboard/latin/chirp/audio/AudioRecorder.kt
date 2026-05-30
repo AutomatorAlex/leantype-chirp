@@ -17,7 +17,7 @@ class AudioRecorder(private val context: Context) {
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
         private const val AUDIO_SOURCE = MediaRecorder.AudioSource.VOICE_RECOGNITION
-        private const val MAX_RECORDING_SECONDS = 120
+        const val MAX_RECORDING_SECONDS = 50
     }
 
     private var audioRecord: AudioRecord? = null
