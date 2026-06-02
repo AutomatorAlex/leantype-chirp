@@ -1,10 +1,13 @@
 package helium314.keyboard.latin.chirp.network
 
+import android.util.Base64
 import android.util.Log
+import helium314.keyboard.latin.chirp.settings.ChirpPreferences.SttProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -12,11 +15,13 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-object OpenRouterSttClient {
-    private const val TAG = "OpenRouterSttClient"
-    private const val ENDPOINT = "https://openrouter.ai/api/v1/audio/transcriptions"
+object ChirpSttClient {
+    private const val TAG = "ChirpSttClient"
+    private const val OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/audio/transcriptions"
+    private const val REQUESTY_ENDPOINT = "https://router.requesty.ai/v1/audio/transcriptions"
 
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
+    private val WAV_MEDIA = "audio/wav".toMediaType()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -25,40 +30,29 @@ object OpenRouterSttClient {
         .callTimeout(150, TimeUnit.SECONDS)
         .build()
 
-    suspend fun transcribe(audioBase64: String, apiKey: String, model: String = "google/chirp-3"): Result<String> =
-        withContext(Dispatchers.IO) {
-            var lastException: Exception? = null
-            var attempt = 0
-            val maxAttempts = 3
-            var delayMs = 1000L
+    suspend fun transcribe(
+        wavData: ByteArray,
+        apiKey: String,
+        model: String,
+        provider: SttProvider,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        var lastException: Exception? = null
+        var attempt = 0
+        val maxAttempts = 3
+        var delayMs = 1000L
 
-            while (attempt < maxAttempts) {
-                try {
-                    Log.d("[DEBUG-CHIRP]", "transcribe() attempt ${attempt + 1}/$maxAttempts. Payload size: ${audioBase64.length} chars")
-                    val bodyJson = JSONObject().apply {
-                        put("model", model)
-                        put("input_audio", JSONObject().apply {
-                            put("data", audioBase64)
-                            put("format", "wav")
-                        })
-                    }
+        while (attempt < maxAttempts) {
+            try {
+                Log.d("[DEBUG-CHIRP]", "transcribe() attempt ${attempt + 1}/$maxAttempts. Provider: $provider, WAV size: ${wavData.size} bytes")
 
-                    val requestBody = bodyJson.toString().toRequestBody(JSON_MEDIA)
-
-                    val request = Request.Builder()
-                        .url(ENDPOINT)
-                        .header("Authorization", "Bearer $apiKey")
-                        .header("Content-Type", "application/json")
-                        .post(requestBody)
-                        .build()
-
-                    val response = client.newCall(request).execute()
+                val request = buildRequest(wavData, apiKey, model, provider)
+                client.newCall(request).execute().use { response ->
                     Log.d("[DEBUG-CHIRP]", "HTTP response code: ${response.code}")
 
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string().orEmpty()
                         val responseCode = response.code
-                        Log.e("[DEBUG-CHIRP]", "HTTP error response body: $errorBody")
+                        Log.e("[DEBUG-CHIRP]", "HTTP error response body: ${sanitizeErrorBody(errorBody)}")
 
                         // If it's a transient error (429, 408, 500-504), we can retry
                         if (responseCode == 429 || responseCode == 408 || responseCode in 500..504) {
@@ -85,7 +79,7 @@ object OpenRouterSttClient {
                     }
 
                     val responseBody = response.body?.string()
-                    Log.d("[DEBUG-CHIRP]", "HTTP success response body: $responseBody")
+                    Log.d("[DEBUG-CHIRP]", "HTTP success response body length: ${responseBody?.length ?: 0} chars")
                     if (responseBody == null) {
                         return@withContext Result.failure(IOException("Empty response body"))
                     }
@@ -99,22 +93,61 @@ object OpenRouterSttClient {
 
                     Log.d("[DEBUG-CHIRP]", "Transcription success: ${text.length} chars")
                     return@withContext Result.success(text)
-                } catch (e: IOException) {
-                    Log.w("[DEBUG-CHIRP]", "Network error during transcription (Attempt ${attempt + 1}/$maxAttempts)", e)
-                    lastException = e
-                    attempt++
-                    if (attempt < maxAttempts) {
-                        delay(delayMs)
-                        delayMs *= 2
-                    }
-                } catch (e: Exception) {
-                    Log.e("[DEBUG-CHIRP]", "Unexpected non-retryable error during transcription", e)
-                    return@withContext Result.failure(e)
                 }
+            } catch (e: IOException) {
+                Log.w("[DEBUG-CHIRP]", "Network error during transcription (Attempt ${attempt + 1}/$maxAttempts)", e)
+                lastException = e
+                attempt++
+                if (attempt < maxAttempts) {
+                    delay(delayMs)
+                    delayMs *= 2
+                }
+            } catch (e: Exception) {
+                Log.e("[DEBUG-CHIRP]", "Unexpected non-retryable error during transcription", e)
+                return@withContext Result.failure(e)
             }
-
-            Result.failure(lastException ?: IOException("Failed after $maxAttempts attempts"))
         }
+
+        Result.failure(lastException ?: IOException("Failed after $maxAttempts attempts"))
+    }
+
+    private fun buildRequest(wavData: ByteArray, apiKey: String, model: String, provider: SttProvider): Request =
+        when (provider) {
+            SttProvider.OPENROUTER -> buildOpenRouterRequest(wavData, apiKey, model)
+            SttProvider.REQUESTY -> buildRequestyRequest(wavData, apiKey, model)
+        }
+
+    private fun buildOpenRouterRequest(wavData: ByteArray, apiKey: String, model: String): Request {
+        val audioBase64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
+        val bodyJson = JSONObject().apply {
+            put("model", model)
+            put("input_audio", JSONObject().apply {
+                put("data", audioBase64)
+                put("format", "wav")
+            })
+        }
+
+        return Request.Builder()
+            .url(OPENROUTER_ENDPOINT)
+            .header("Authorization", "Bearer $apiKey")
+            .header("Content-Type", "application/json")
+            .post(bodyJson.toString().toRequestBody(JSON_MEDIA))
+            .build()
+    }
+
+    private fun buildRequestyRequest(wavData: ByteArray, apiKey: String, model: String): Request {
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("model", model)
+            .addFormDataPart("file", "audio.wav", wavData.toRequestBody(WAV_MEDIA))
+            .build()
+
+        return Request.Builder()
+            .url(REQUESTY_ENDPOINT)
+            .header("Authorization", "Bearer $apiKey")
+            .post(requestBody)
+            .build()
+    }
 
     private fun extractErrorMessage(body: String): String {
         if (body.isBlank()) return "unknown error"

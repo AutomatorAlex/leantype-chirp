@@ -1182,10 +1182,14 @@ New dictionary:
     <string name="clear_emoji_history_message">Are you sure you want to clear your recently used emojis?</string>
     <string name="floating_keyboard_drag_handle">Drag to move keyboard</string>
     <string name="floating_keyboard_resize_handle">Drag to resize keyboard</string>
-    <string name="chirp_voice_enable_title">Enable OpenRouter voice input</string>
-    <string name="chirp_voice_enable_summary">Tap the mic key to record and transcribe speech via OpenRouter</string>
-    <string name="chirp_api_key_title">OpenRouter API key</string>
-    <string name="chirp_api_key_summary">Required for Chirp STT transcription</string>
+    <string name="chirp_provider_title">Voice input provider</string>
+    <string name="chirp_provider_summary">Choose OpenRouter or Requesty for speech transcription</string>
+    <string name="chirp_provider_openrouter">OpenRouter</string>
+    <string name="chirp_provider_requesty">Requesty.ai</string>
+    <string name="chirp_voice_enable_title">Enable AI voice input</string>
+    <string name="chirp_voice_enable_summary">Tap the mic key to record and transcribe speech</string>
+    <string name="chirp_api_key_title">Voice input API key</string>
+    <string name="chirp_api_key_summary">Required for selected voice input provider</string>
     <string name="chirp_model_title">STT model</string>
-    <string name="chirp_model_summary">Default is google/chirp-3</string>
+    <string name="chirp_model_summary">Speech-to-text model for selected provider</string>
 </resources>

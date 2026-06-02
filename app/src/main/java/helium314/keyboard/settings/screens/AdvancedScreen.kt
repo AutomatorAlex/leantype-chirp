@@ -41,6 +41,7 @@ import helium314.keyboard.latin.common.splitOnWhitespace
 import helium314.keyboard.latin.settings.DebugSettings
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.chirp.settings.ChirpPreferences
 import helium314.keyboard.latin.utils.checkTimestampFormat
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.settings.NextScreenIcon
@@ -53,6 +54,7 @@ import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.SettingsActivity
 import helium314.keyboard.settings.SettingsDestination
 import helium314.keyboard.settings.dialogs.TextInputDialog
+import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.preferences.SliderPreference
 import helium314.keyboard.settings.preferences.SwitchPreference
 import helium314.keyboard.settings.Theme
@@ -71,7 +73,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import kotlinx.coroutines.flow.MutableStateFlow
 
+
+private val chirpProviderState = MutableStateFlow<ChirpPreferences.SttProvider?>(null)
 
 @Composable
 fun AdvancedSettingsScreen(
@@ -533,9 +538,41 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
             )
         }
     },
+    Setting(context, SettingsWithoutKey.CHIRP_PROVIDER, R.string.chirp_provider_title, R.string.chirp_provider_summary) { setting ->
+        var showDialog by rememberSaveable { mutableStateOf(false) }
+        val ctx = LocalContext.current
+        val chirpPrefs = remember { ChirpPreferences(ctx) }
+        if (chirpProviderState.value == null) {
+            chirpProviderState.value = chirpPrefs.getProvider()
+        }
+        val currentProvider by chirpProviderState.collectAsState()
+        val items = listOf(
+            ctx.getString(R.string.chirp_provider_openrouter) to ChirpPreferences.SttProvider.OPENROUTER,
+            ctx.getString(R.string.chirp_provider_requesty) to ChirpPreferences.SttProvider.REQUESTY,
+        )
+        val selectedItem = items.firstOrNull { it.second == currentProvider } ?: items.first()
+        Preference(
+            name = setting.title,
+            description = selectedItem.first,
+            onClick = { showDialog = true }
+        )
+        if (showDialog) {
+            ListPickerDialog(
+                onDismissRequest = { showDialog = false },
+                items = items,
+                onItemSelected = {
+                    chirpPrefs.setProvider(it.second)
+                    chirpProviderState.value = it.second
+                },
+                selectedItem = selectedItem,
+                title = { Text(stringResource(R.string.chirp_provider_title)) },
+                getItemName = { it.first }
+            )
+        }
+    },
     Setting(context, SettingsWithoutKey.CHIRP_VOICE_ENABLED, R.string.chirp_voice_enable_title, R.string.chirp_voice_enable_summary) {
         val ctx = LocalContext.current
-        val chirpPrefs = remember { helium314.keyboard.latin.chirp.settings.ChirpPreferences(ctx) }
+        val chirpPrefs = remember { ChirpPreferences(ctx) }
         SwitchPreference(it, chirpPrefs.isVoiceEnabled()) { enabled ->
             chirpPrefs.setVoiceEnabled(enabled)
         }
@@ -543,25 +580,41 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
     Setting(context, SettingsWithoutKey.CHIRP_API_KEY, R.string.chirp_api_key_title, R.string.chirp_api_key_summary) { setting ->
         var showDialog by rememberSaveable { mutableStateOf(false) }
         val ctx = LocalContext.current
-        val chirpPrefs = remember { helium314.keyboard.latin.chirp.settings.ChirpPreferences(ctx) }
+        val chirpPrefs = remember { ChirpPreferences(ctx) }
+        var hasKey by remember { mutableStateOf(chirpPrefs.getApiKey().isNotBlank()) }
+        val currentProvider by chirpProviderState.collectAsState()
+        val provider = currentProvider ?: chirpPrefs.getProvider()
+        LaunchedEffect(provider) {
+            hasKey = chirpPrefs.getApiKey(provider).isNotBlank()
+        }
         Preference(
             name = setting.title,
-            description = if (chirpPrefs.getApiKey().isNotBlank()) "Key set" else stringResource(R.string.chirp_api_key_summary),
+            description = if (hasKey) "Key set" else stringResource(R.string.chirp_api_key_summary),
             onClick = { showDialog = true }
         )
         if (showDialog) {
             TextInputDialog(
                 onDismissRequest = { showDialog = false },
-                textInputLabel = { Text("sk-or-v1-...") },
+                textInputLabel = { Text("API key") },
                 initialText = chirpPrefs.getApiKey(),
-                onConfirmed = { chirpPrefs.setApiKey(it) },
+                onConfirmed = {
+                    chirpPrefs.setApiKey(it)
+                    hasKey = it.isNotBlank()
+                },
                 title = { Text(stringResource(R.string.chirp_api_key_title)) },
-                neutralButtonText = if (chirpPrefs.getApiKey().isNotBlank()) stringResource(R.string.delete) else null,
-                onNeutral = { chirpPrefs.setApiKey("") },
+                neutralButtonText = if (hasKey) stringResource(R.string.delete) else null,
+                onNeutral = {
+                    chirpPrefs.setApiKey("")
+                    hasKey = false
+                },
                 extraContent = {
                     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                    val keyUrl = when (provider) {
+                        ChirpPreferences.SttProvider.OPENROUTER -> "https://openrouter.ai/settings/keys"
+                        ChirpPreferences.SttProvider.REQUESTY -> "https://app.requesty.ai"
+                    }
                     TextButton(
-                        onClick = { uriHandler.openUri("https://openrouter.ai/settings/keys") }
+                        onClick = { uriHandler.openUri(keyUrl) }
                     ) {
                         Text("Get API key")
                     }
@@ -572,21 +625,34 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
     Setting(context, SettingsWithoutKey.CHIRP_MODEL, R.string.chirp_model_title, R.string.chirp_model_summary) { setting ->
         var showDialog by rememberSaveable { mutableStateOf(false) }
         val ctx = LocalContext.current
-        val chirpPrefs = remember { helium314.keyboard.latin.chirp.settings.ChirpPreferences(ctx) }
+        val chirpPrefs = remember { ChirpPreferences(ctx) }
+        var model by remember { mutableStateOf(chirpPrefs.getModel()) }
+        val currentProvider by chirpProviderState.collectAsState()
+        val provider = currentProvider ?: chirpPrefs.getProvider()
+        val defaultModel = chirpPrefs.defaultModelFor(provider)
+        LaunchedEffect(provider) {
+            model = chirpPrefs.getModel()
+        }
         Preference(
             name = setting.title,
-            description = chirpPrefs.getModel(),
+            description = model,
             onClick = { showDialog = true }
         )
         if (showDialog) {
             TextInputDialog(
                 onDismissRequest = { showDialog = false },
-                textInputLabel = { Text("google/chirp-3") },
-                initialText = chirpPrefs.getModel(),
-                onConfirmed = { chirpPrefs.setModel(it) },
+                textInputLabel = { Text(defaultModel) },
+                initialText = model,
+                onConfirmed = {
+                    chirpPrefs.setModel(it)
+                    model = chirpPrefs.getModel()
+                },
                 title = { Text(stringResource(R.string.chirp_model_title)) },
-                neutralButtonText = if (chirpPrefs.getModel() != helium314.keyboard.latin.chirp.settings.ChirpPreferences.DEFAULT_MODEL) stringResource(R.string.button_default) else null,
-                onNeutral = { chirpPrefs.setModel(helium314.keyboard.latin.chirp.settings.ChirpPreferences.DEFAULT_MODEL) }
+                neutralButtonText = if (model != defaultModel) stringResource(R.string.button_default) else null,
+                onNeutral = {
+                    chirpPrefs.setModel(defaultModel)
+                    model = defaultModel
+                }
             )
         }
     },

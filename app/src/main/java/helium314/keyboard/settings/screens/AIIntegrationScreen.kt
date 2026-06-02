@@ -79,6 +79,7 @@ private fun StandardAIIntegrationScreen(onClickBack: () -> Unit) {
         }
 
         // OpenRouter / Chirp voice settings (always shown in standard flavor)
+        add(SettingsWithoutKey.CHIRP_PROVIDER)
         add(SettingsWithoutKey.CHIRP_VOICE_ENABLED)
         add(SettingsWithoutKey.CHIRP_API_KEY)
         add(SettingsWithoutKey.CHIRP_MODEL)

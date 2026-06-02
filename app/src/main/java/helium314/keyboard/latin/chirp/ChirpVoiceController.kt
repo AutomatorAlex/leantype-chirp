@@ -10,7 +10,7 @@ import android.widget.Toast
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.chirp.audio.AudioRecorder
 import helium314.keyboard.latin.chirp.audio.WavEncoder
-import helium314.keyboard.latin.chirp.network.OpenRouterSttClient
+import helium314.keyboard.latin.chirp.network.ChirpSttClient
 import helium314.keyboard.latin.chirp.settings.ChirpPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +19,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.util.Base64
 import android.util.Log
 
 class ChirpVoiceController(private val ime: LatinIME) {
@@ -136,13 +135,12 @@ class ChirpVoiceController(private val ime: LatinIME) {
                 Log.d("[DEBUG-CHIRP]", "Encoding PCM to WAV")
                 val wavData = withContext(Dispatchers.IO) { WavEncoder.encode(pcmData) }
                 Log.d("[DEBUG-CHIRP]", "WAV data size: ${wavData.size} bytes")
-                val base64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
-                Log.d("[DEBUG-CHIRP]", "Base64 payload size: ${base64.length} chars")
+                val provider = prefs.getProvider()
                 val model = prefs.getModel()
                 val apiKey = prefs.getApiKey()
 
-                Log.d("[DEBUG-CHIRP]", "Sending transcription request to OpenRouter. Model: $model")
-                val result = OpenRouterSttClient.transcribe(base64, apiKey, model)
+                Log.d("[DEBUG-CHIRP]", "Sending transcription request. Provider: $provider, model: $model")
+                val result = ChirpSttClient.transcribe(wavData, apiKey, model, provider)
                 Log.d("[DEBUG-CHIRP]", "Transcription request completed. Success: ${result.isSuccess}")
                 result.onSuccess { text ->
                     Log.d("[DEBUG-CHIRP]", "Transcription success. Text length: ${text.length} chars")
