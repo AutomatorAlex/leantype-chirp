@@ -516,8 +516,10 @@ class ProofreadService(private val context: Context) {
                 var content = message?.optString("content", "") ?: ""
                 
                 if (!showThinking && content.isNotBlank()) {
-                    // Filter out <think>...</think> blocks
-                    content = content.replace(Regex("<think>[\\s\\S]*?</think>"), "").trim()
+                    // Filter out  thinking... and  reasoning... XML blocks
+                    content = content.replace(Regex("<thinking>[\\s\\S]*?</thinking>", RegexOption.IGNORE_CASE), "")
+                    content = content.replace(Regex("<reasoning>[\\s\\S]*?</reasoning>", RegexOption.IGNORE_CASE), "")
+                    content = content.trim()
                 }
 
                 if (content.isNotBlank()) {
