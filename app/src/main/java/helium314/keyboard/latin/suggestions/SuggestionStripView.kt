@@ -839,6 +839,8 @@ setToolbarVisibility(isToolbarManuallyOpen, false)
             toolbar.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.clearColorFilter()
             pinnedKeys.findViewWithTag<ImageButton>(ToolbarKey.VOICE)?.clearColorFilter()
         }
+    }
+
     private fun getLanguageHistory(prefs: SharedPreferences) = helium314.keyboard.latin.utils.TranslationUtils.getLanguageHistory(prefs)
 
     private fun saveLanguageHistory(prefs: SharedPreferences, name: String, code: String) = helium314.keyboard.latin.utils.TranslationUtils.saveLanguageHistory(prefs, name, code)
