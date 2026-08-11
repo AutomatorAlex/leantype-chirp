@@ -66,15 +66,17 @@ fun AppearanceScreen(
         SettingsWithoutKey.BACKGROUND_IMAGE,
         SettingsWithoutKey.BACKGROUND_IMAGE_LANDSCAPE,
         R.string.settings_category_miscellaneous,
+        Settings.PREF_PERSIST_FLOATING_KEYBOARD,
+        // ponytail: persist text edit mode settings item
+        Settings.PREF_PERSIST_TEXT_EDIT_MODE,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD,
+        Settings.PREF_FOLDABLE_MODE,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE,
         if (prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE, Defaults.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE)
             || prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD, Defaults.PREF_ENABLE_SPLIT_KEYBOARD))
             Settings.PREF_SPLIT_SPACER_SCALE_PREFIX else null,
-        if (prefs.getBoolean(Settings.PREF_THEME_KEY_BORDERS, Defaults.PREF_THEME_KEY_BORDERS))
-            Settings.PREF_NARROW_KEY_GAPS else null,
-        if (prefs.getBoolean(Settings.PREF_THEME_KEY_BORDERS, Defaults.PREF_THEME_KEY_BORDERS)
-            && prefs.getBoolean(Settings.PREF_NARROW_KEY_GAPS, Defaults.PREF_NARROW_KEY_GAPS))
+        Settings.PREF_NARROW_KEY_GAPS,
+        if (prefs.getBoolean(Settings.PREF_NARROW_KEY_GAPS, Defaults.PREF_NARROW_KEY_GAPS))
             Settings.PREF_NARROW_KEY_GAPS_LEVEL else null,
         Settings.PREF_KEYBOARD_HEIGHT_SCALE_PREFIX,
         Settings.PREF_BOTTOM_PADDING_SCALE_PREFIX,
@@ -84,6 +86,7 @@ fun AppearanceScreen(
         Settings.PREF_FONT_SCALE,
         SettingsWithoutKey.CUSTOM_EMOJI_FONT,
         Settings.PREF_EMOJI_FONT_SCALE,
+        Settings.PREF_USE_SYSTEM_EMOJI,
         if (prefs.getFloat(Settings.PREF_EMOJI_FONT_SCALE, Defaults.PREF_EMOJI_FONT_SCALE) != 1f)
             Settings.PREF_EMOJI_KEY_FIT else null,
         if (prefs.getInt(Settings.PREF_EMOJI_MAX_SDK, 0) >= 24)
@@ -201,6 +204,19 @@ fun createAppearanceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_ENABLE_SPLIT_KEYBOARD, R.string.enable_split_keyboard) {
         SwitchPreference(it, Defaults.PREF_ENABLE_SPLIT_KEYBOARD) { KeyboardSwitcher.getInstance().reloadKeyboard() }
     },
+    Setting(context, Settings.PREF_FOLDABLE_MODE, R.string.pref_foldable_mode_title, R.string.pref_foldable_mode_summary) {
+        SwitchPreference(it, false) {
+            helium314.keyboard.latin.utils.ScreenProfileProvider.invalidateCache()
+            KeyboardSwitcher.getInstance().reloadKeyboard()
+        }
+    },
+    Setting(context, Settings.PREF_PERSIST_FLOATING_KEYBOARD, R.string.persist_floating_keyboard_title, R.string.persist_floating_keyboard_summary) {
+        SwitchPreference(it, Defaults.PREF_PERSIST_FLOATING_KEYBOARD)
+    },
+    // ponytail: persist text edit mode preference widget
+    Setting(context, Settings.PREF_PERSIST_TEXT_EDIT_MODE, R.string.persist_text_edit_mode_title, R.string.persist_text_edit_mode_summary) {
+        SwitchPreference(it, Defaults.PREF_PERSIST_TEXT_EDIT_MODE)
+    },
     Setting(context, Settings.PREF_SPLIT_SPACER_SCALE_PREFIX, R.string.split_spacer_scale) { setting ->
         MultiSliderPreference(
             name = setting.title,
@@ -222,18 +238,9 @@ fun createAppearanceSettings(context: Context) = listOf(
             name = setting.title,
             key = setting.key,
             default = Defaults.PREF_NARROW_KEY_GAPS_LEVEL,
-            range = 1f..5f,
+            range = 0f..10f,
             stepSize = 1,
-            description = { level ->
-                when (level) {
-                    1 -> stringResource(R.string.narrowness_level_low)
-                    2 -> stringResource(R.string.narrowness_level_medium_low)
-                    3 -> stringResource(R.string.narrowness_level_medium)
-                    4 -> stringResource(R.string.narrowness_level_medium_high)
-                    5 -> stringResource(R.string.narrowness_level_high)
-                    else -> level.toString()
-                }
-            }
+            description = { level -> if (level.toInt() == 0) "0 (Standard)" else level.toInt().toString() }
         ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     },
     Setting(context, Settings.PREF_KEYBOARD_HEIGHT_SCALE_PREFIX, R.string.prefs_keyboard_height_scale) { setting ->
@@ -292,6 +299,13 @@ fun createAppearanceSettings(context: Context) = listOf(
             range = 0.5f..1.5f,
             description = { "${(100 * it).toInt()}%" }
         ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    },
+    Setting(context, Settings.PREF_USE_SYSTEM_EMOJI, R.string.prefs_use_system_emoji, R.string.prefs_use_system_emoji_summary) { setting ->
+        val ctx = LocalContext.current
+        SwitchPreference(setting, Defaults.PREF_USE_SYSTEM_EMOJI) { newValue ->
+            ctx.prefs().edit(commit = true) { putBoolean(Settings.PREF_USE_SYSTEM_EMOJI, newValue) }
+            Runtime.getRuntime().exit(0)
+        }
     },
     Setting(context, Settings.PREF_EMOJI_KEY_FIT, R.string.prefs_emoji_key_fit) {
         SwitchPreference(it, Defaults.PREF_EMOJI_KEY_FIT) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }

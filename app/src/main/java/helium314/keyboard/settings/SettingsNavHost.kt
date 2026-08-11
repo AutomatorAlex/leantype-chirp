@@ -23,6 +23,7 @@ import helium314.keyboard.settings.screens.AppearanceScreen
 import helium314.keyboard.settings.screens.ColorsScreen
 import helium314.keyboard.settings.screens.DebugScreen
 import helium314.keyboard.settings.screens.CustomAIKeysScreen
+import helium314.keyboard.settings.screens.TextExpanderScreen
 import helium314.keyboard.settings.screens.DictionaryScreen
 import helium314.keyboard.settings.screens.LibrariesHubScreen
 import helium314.keyboard.settings.screens.GestureTypingScreen
@@ -30,6 +31,7 @@ import helium314.keyboard.settings.screens.LanguageScreen
 import helium314.keyboard.settings.screens.MainSettingsScreen
 import helium314.keyboard.settings.screens.PersonalDictionariesScreen
 import helium314.keyboard.settings.screens.PersonalDictionaryScreen
+import helium314.keyboard.settings.screens.BlockedWordsScreen
 import helium314.keyboard.settings.screens.PreferencesScreen
 import helium314.keyboard.settings.screens.SecondaryLayoutScreen
 import helium314.keyboard.settings.screens.SubtypeScreen
@@ -37,6 +39,7 @@ import helium314.keyboard.settings.screens.TextCorrectionScreen
 import helium314.keyboard.settings.screens.ToolbarScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -77,7 +80,6 @@ fun SettingsNavHost(
                 onClickAdvanced = { navController.navigate(SettingsDestination.Advanced) },
                 onClickAppearance = { navController.navigate(SettingsDestination.Appearance) },
                 onClickLanguage = { navController.navigate(SettingsDestination.Languages) },
-                onClickLayouts = { navController.navigate(SettingsDestination.Layouts) },
                 onClickDictionaries = { navController.navigate(SettingsDestination.Dictionaries) },
                 onClickAIIntegration = { navController.navigate(SettingsDestination.AIIntegration) },
                 onClickGesture = { navController.navigate(SettingsDestination.GestureTyping) },
@@ -142,8 +144,14 @@ fun SettingsNavHost(
         composable(SettingsDestination.PersonalDictionaries) {
             PersonalDictionariesScreen(onClickBack = ::goBack)
         }
+        composable(SettingsDestination.BlockedWords) {
+            BlockedWordsScreen(onClickBack = ::goBack)
+        }
         composable(SettingsDestination.Languages) {
             LanguageScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.LanguagesList) {
+            helium314.keyboard.settings.screens.LanguagesListScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.Dictionaries) {
             DictionaryScreen(onClickBack = ::goBack)
@@ -159,6 +167,12 @@ fun SettingsNavHost(
         }
         composable(SettingsDestination.Subtype + "{subtype}") {
             SubtypeScreen(initialSubtype = it.arguments?.getString("subtype")!!.toSettingsSubtype(), onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.TextExpander) {
+            TextExpanderScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.BackgroundServices) {
+            helium314.keyboard.settings.screens.BackgroundServicesScreen(onClickBack = ::goBack)
         }
     }
     if (target.value != SettingsDestination.Settings/* && target.value != navController.currentBackStackEntry?.destination?.route*/)
@@ -181,15 +195,22 @@ object SettingsDestination {
     const val ColorsNight = "colors_night/"
     const val PersonalDictionaries = "personal_dictionaries"
     const val PersonalDictionary = "personal_dictionary/"
+    const val BlockedWords = "blocked_words"
     const val Languages = "languages"
+    const val LanguagesList = "languages_list"
     const val Subtype = "subtype/"
     const val Layouts = "layouts"
     const val Dictionaries = "dictionaries"
     const val CustomAIKeys = "custom_ai_keys"
     const val CustomAIKeyConfig = "custom_ai_key_config/"
+    const val TextExpander = "text_expander"
+    const val BackgroundServices = "background_services"
     val navTarget = MutableStateFlow(Settings)
 
-    private val navScope = CoroutineScope(Dispatchers.Default)
+    // Use SupervisorJob so a cancellation in one navigation hop
+    // doesn't tear down the rest of the settings UI. Dispatchers.Default
+    // is fine here because we're only updating a MutableStateFlow.
+    private val navScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     fun navigateTo(target: String) {
         if (navTarget.value == target) {
             // triggers recompose twice, but that's ok as it's a rare event

@@ -236,7 +236,9 @@ public final class EmojiPalettesView extends LinearLayout
     private EmojiSearchAdapter mSearchAdapter;
     private EditText mSearchBar;
     private boolean mInSearchMode = false;
+    private boolean mIsDownloadingEmojiDict = false;
     private KeyboardActionListener mOriginalActionListener;
+    private KeyboardLayoutSet mSearchKeyboardLayoutSet;
 
     private EditorInfo mEditorInfo;
 
@@ -270,10 +272,14 @@ public final class EmojiPalettesView extends LinearLayout
         // The main keyboard expands to the entire this {@link KeyboardView}.
         final int width = ResourceUtils.getKeyboardWidth(getContext(), Settings.getValues())
                 + getPaddingLeft() + getPaddingRight();
-        final int height = ResourceUtils.getSecondaryKeyboardHeight(res, Settings.getValues())
-                + getPaddingTop() + getPaddingBottom();
+        if (!mInSearchMode) {
+            final int height = ResourceUtils.getSecondaryKeyboardHeight(res, Settings.getValues())
+                    + getPaddingTop() + getPaddingBottom();
+            setMeasuredDimension(width, height);
+        } else {
+            setMeasuredDimension(width, getMeasuredHeight());
+        }
         mEmojiCategoryPageIndicatorView.mWidth = width;
-        setMeasuredDimension(width, height);
     }
 
     public void initialize() { // needs to be delayed for access to EmojiTabStrip, which is not a child of this
@@ -311,6 +317,7 @@ public final class EmojiPalettesView extends LinearLayout
                 androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false));
         mSearchAdapter = new EmojiSearchAdapter(emoji -> {
             mKeyboardActionListener.onTextInput(emoji);
+            addRecentKey(emoji);
             // Optionally close search or keep it open for multiple inputs?
             // restore standard behavior: stop search
             stopSearchMode();
@@ -366,7 +373,8 @@ public final class EmojiPalettesView extends LinearLayout
         
         // Visual indicator for selected tab
         if (categoryId == mEmojiCategory.getCurrentCategoryId()) {
-            mColors.setColor(iconView, ColorType.EMOJI_CATEGORY_SELECTED);
+            iconView.setBackgroundResource(R.drawable.toolbar_key_background);
+            Settings.getValues().mColors.setColor(iconView.getBackground(), ColorType.TOOL_BAR_EXPAND_KEY_BACKGROUND);
         }
         
         if (categoryId == EmojiCategory.ID_RECENTS) {
@@ -497,13 +505,14 @@ public final class EmojiPalettesView extends LinearLayout
         if (Settings.getValues().mSplitToolbar) {
             // Do not add results to this row, they go to SuggestionStripView
             mSearchAdapter = null;
+            updateSplitToolbarEmojiSuggestions();
         } else if (sDictionaryFacilitator == null) {
             Button downloadBtn = new Button(ctx);
             downloadBtn.setText("Download Dictionary");
             downloadBtn.setTextSize(12); // Keep it small to fit
             downloadBtn.setAllCaps(false);
             downloadBtn.setOnClickListener(v -> {
-                if ("standard".equals(BuildConfig.FLAVOR)) {
+                if ("standard".equals(BuildConfig.FLAVOR) || "standardfull".equals(BuildConfig.FLAVOR)) {
                     downloadEmojiDictionary();
                     downloadBtn.setText("Downloading...");
                     downloadBtn.setEnabled(false);
@@ -550,37 +559,107 @@ public final class EmojiPalettesView extends LinearLayout
 
         // Listener for input... (Kept same as before)
         bottomRow.setKeyboardActionListener(new KeyboardActionListener() {
+            private int mDeleteSwipeStartSel = -1;
+            private int mCurrentDeleteSwipeStart = -1;
+
             @Override
             public void onCodeInput(int primaryCode, int x, int y, boolean isKeyRepeat) {
                 if (primaryCode == KeyCode.DELETE) {
                     Editable text = mSearchBar.getText();
-                    if (text != null && text.length() > 0)
-                        text.delete(text.length() - 1, text.length());
+                    if (text != null && text.length() > 0) {
+                        int selStart = mSearchBar.getSelectionStart();
+                        int selEnd = mSearchBar.getSelectionEnd();
+                        if (selStart >= 0 && selEnd > selStart) {
+                            text.delete(selStart, selEnd);
+                        } else if (selStart > 0) {
+                            text.delete(selStart - 1, selStart);
+                        }
+                    }
                 } else if (primaryCode == helium314.keyboard.latin.common.Constants.CODE_SPACE) {
-                    mSearchBar.append(" ");
+                    Editable text = mSearchBar.getText();
+                    int sel = mSearchBar.getSelectionStart();
+                    if (sel < 0) sel = text.length();
+                    text.insert(sel, " ");
                 } else if (primaryCode > 0) {
-                    mSearchBar.append(String.valueOf((char) primaryCode));
+                    Editable text = mSearchBar.getText();
+                    int sel = mSearchBar.getSelectionStart();
+                    if (sel < 0) sel = text.length();
+                    text.insert(sel, String.valueOf((char) primaryCode));
                 } else if (primaryCode == helium314.keyboard.latin.common.Constants.CODE_ENTER) {
                     stopSearchMode();
-                } else {
+                } else if (primaryCode == KeyCode.SYMBOL || primaryCode == KeyCode.SYMBOL_ALPHA || primaryCode == KeyCode.ALPHA) {
+                    if (mSearchKeyboardLayoutSet != null) {
+                        MainKeyboardView bottomRow = findViewById(R.id.bottom_row_keyboard);
+                        int currentElementId = bottomRow.getKeyboard().mId.mElementId;
+                        boolean isOnSymbols = currentElementId == KeyboardId.ELEMENT_SYMBOLS
+                                || currentElementId == KeyboardId.ELEMENT_SYMBOLS_SHIFTED;
+                        int targetId = isOnSymbols ? KeyboardId.ELEMENT_ALPHABET : KeyboardId.ELEMENT_SYMBOLS;
+                        bottomRow.setKeyboard(mSearchKeyboardLayoutSet.getKeyboard(targetId));
+                        bottomRow.setKeyPreviewPopupEnabled(Settings.getValues().mKeyPreviewPopupOn);
+                    }
+                } else if (primaryCode == KeyCode.SHIFT) {
+                    if (mSearchKeyboardLayoutSet != null) {
+                        MainKeyboardView bottomRow = findViewById(R.id.bottom_row_keyboard);
+                        int currentElementId = bottomRow.getKeyboard().mId.mElementId;
+                        int targetId = switch (currentElementId) {
+                            case KeyboardId.ELEMENT_SYMBOLS -> KeyboardId.ELEMENT_SYMBOLS_SHIFTED;
+                            case KeyboardId.ELEMENT_SYMBOLS_SHIFTED -> KeyboardId.ELEMENT_SYMBOLS;
+                            case KeyboardId.ELEMENT_ALPHABET -> KeyboardId.ELEMENT_ALPHABET_MANUAL_SHIFTED;
+                            default -> KeyboardId.ELEMENT_ALPHABET;
+                        };
+                        bottomRow.setKeyboard(mSearchKeyboardLayoutSet.getKeyboard(targetId));
+                        bottomRow.setKeyPreviewPopupEnabled(Settings.getValues().mKeyPreviewPopupOn);
+                    }
+                } else if (primaryCode == KeyCode.EMOJI) {
                     stopSearchMode();
+                } else if (primaryCode == KeyCode.CLIPBOARD) {
+                    stopSearchMode();
+                    mOriginalActionListener.onCodeInput(primaryCode, x, y, isKeyRepeat);
+                } else if (primaryCode == KeyCode.LANGUAGE_SWITCH
+                        || primaryCode == KeyCode.CUSTOM1 || primaryCode == KeyCode.CUSTOM2
+                        || primaryCode == KeyCode.CUSTOM3 || primaryCode == KeyCode.CUSTOM4
+                        || primaryCode == KeyCode.CUSTOM5) {
+                } else {
                     mOriginalActionListener.onCodeInput(primaryCode, x, y, isKeyRepeat);
                 }
             }
 
             @Override
             public void onPressKey(int p, int r, boolean s, HapticEvent h) {
-                mOriginalActionListener.onPressKey(p, r, s, h);
+                if (p != KeyCode.SYMBOL && p != KeyCode.ALPHA
+                        && p != KeyCode.NUMPAD && p != KeyCode.SYMBOL_ALPHA
+                        && p != KeyCode.SHIFT
+                        && p != KeyCode.EMOJI && p != KeyCode.CLIPBOARD
+                        && p != KeyCode.LANGUAGE_SWITCH
+                        && p != KeyCode.CUSTOM1 && p != KeyCode.CUSTOM2
+                        && p != KeyCode.CUSTOM3 && p != KeyCode.CUSTOM4
+                        && p != KeyCode.CUSTOM5) {
+                    mOriginalActionListener.onPressKey(p, r, s, h);
+                }
             }
 
             @Override
             public void onReleaseKey(int p, boolean w) {
-                mOriginalActionListener.onReleaseKey(p, w);
+                mDeleteSwipeStartSel = -1;
+                mCurrentDeleteSwipeStart = -1;
+                if (p != KeyCode.SYMBOL && p != KeyCode.ALPHA
+                        && p != KeyCode.NUMPAD && p != KeyCode.SYMBOL_ALPHA
+                        && p != KeyCode.SHIFT
+                        && p != KeyCode.EMOJI && p != KeyCode.CLIPBOARD
+                        && p != KeyCode.LANGUAGE_SWITCH
+                        && p != KeyCode.CUSTOM1 && p != KeyCode.CUSTOM2
+                        && p != KeyCode.CUSTOM3 && p != KeyCode.CUSTOM4
+                        && p != KeyCode.CUSTOM5) {
+                    mOriginalActionListener.onReleaseKey(p, w);
+                }
             }
 
             @Override
             public void onTextInput(String t) {
-                mSearchBar.append(t);
+                Editable text = mSearchBar.getText();
+                int sel = mSearchBar.getSelectionStart();
+                if (sel < 0) sel = text.length();
+                text.insert(sel, t);
             }
 
             @Override
@@ -620,6 +699,8 @@ public final class EmojiPalettesView extends LinearLayout
 
             @Override
             public void onCancelInput() {
+                mDeleteSwipeStartSel = -1;
+                mCurrentDeleteSwipeStart = -1;
             }
 
             @Override
@@ -633,7 +714,22 @@ public final class EmojiPalettesView extends LinearLayout
 
             @Override
             public boolean onHorizontalSpaceSwipe(int s) {
-                return false;
+                Editable text = mSearchBar.getText();
+                if (text == null) return false;
+                int len = text.length();
+                int selStart = mSearchBar.getSelectionStart();
+                int selEnd = mSearchBar.getSelectionEnd();
+                if (selStart < 0 || selEnd < 0) return false;
+
+                boolean rtl = RichInputMethodManager.getInstance().getCurrentSubtype().isRtlSubtype();
+                int steps = rtl ? -s : s;
+
+                int newSel = selStart + steps;
+                if (newSel < 0) newSel = 0;
+                if (newSel > len) newSel = len;
+
+                mSearchBar.setSelection(newSel);
+                return true;
             }
 
             @Override
@@ -652,10 +748,32 @@ public final class EmojiPalettesView extends LinearLayout
 
             @Override
             public void onMoveDeletePointer(int s) {
+                Editable text = mSearchBar.getText();
+                if (text == null) return;
+                if (mDeleteSwipeStartSel == -1) {
+                    mDeleteSwipeStartSel = mSearchBar.getSelectionEnd();
+                    mCurrentDeleteSwipeStart = mDeleteSwipeStartSel;
+                }
+                if (mDeleteSwipeStartSel < 0) return;
+
+                mCurrentDeleteSwipeStart += s;
+                if (mCurrentDeleteSwipeStart < 0) mCurrentDeleteSwipeStart = 0;
+                if (mCurrentDeleteSwipeStart > mDeleteSwipeStartSel) mCurrentDeleteSwipeStart = mDeleteSwipeStartSel;
+
+                mSearchBar.setSelection(mCurrentDeleteSwipeStart, mDeleteSwipeStartSel);
             }
 
             @Override
             public void onUpWithDeletePointerActive() {
+                Editable text = mSearchBar.getText();
+                if (text == null) return;
+                int selStart = mSearchBar.getSelectionStart();
+                int selEnd = mSearchBar.getSelectionEnd();
+                if (selStart >= 0 && selEnd > selStart) {
+                    text.delete(selStart, selEnd);
+                }
+                mDeleteSwipeStartSel = -1;
+                mCurrentDeleteSwipeStart = -1;
             }
 
             @Override
@@ -666,6 +784,7 @@ public final class EmojiPalettesView extends LinearLayout
         // Load Alpha Keyboard
         KeyboardLayoutSet.Builder builder = new KeyboardLayoutSet.Builder(ctx, null);
         builder.setSubtype(RichInputMethodManager.getInstance().getCurrentSubtype());
+        builder.setSplitLayoutEnabled(Settings.getValues().mIsSplitKeyboardEnabled);
 
         // Fix: Use SecondaryKeyboardHeight which provides the exact height of the Emoji
         // palettes area
@@ -673,11 +792,17 @@ public final class EmojiPalettesView extends LinearLayout
         builder.setKeyboardGeometry(ResourceUtils.getKeyboardWidth(ctx, Settings.getValues()),
                 ResourceUtils.getSecondaryKeyboardHeight(ctx.getResources(), Settings.getValues()));
 
-        KeyboardLayoutSet kls = builder.build();
-        bottomRow.setKeyboard(kls.getKeyboard(KeyboardId.ELEMENT_ALPHABET));
+        mSearchKeyboardLayoutSet = builder.build();
+        bottomRow.setKeyboard(mSearchKeyboardLayoutSet.getKeyboard(KeyboardId.ELEMENT_ALPHABET));
+        bottomRow.setKeyPreviewPopupEnabled(Settings.getValues().mKeyPreviewPopupOn);
 
         // Focus
         mSearchBar.requestFocus();
+        if (isInLayout()) {
+            post(this::requestLayout);
+        } else {
+            requestLayout();
+        }
     }
 
     private void stopSearchMode() {
@@ -686,21 +811,13 @@ public final class EmojiPalettesView extends LinearLayout
             return;
         mInSearchMode = false;
 
-        // Return to alphabet keyboard directly upon closing search
-        // EXCEPTION: do not do this if we are being detached from the window,
-        // as this will corrupt the KeyboardSwitcher state and hide the toolbar.
-        if (mOriginalActionListener != null && isAttachedToWindow()) {
-            mOriginalActionListener.onCodeInput(KeyCode.ALPHA,
-                    helium314.keyboard.latin.common.Constants.NOT_A_COORDINATE,
-                    helium314.keyboard.latin.common.Constants.NOT_A_COORDINATE, false);
-        }
-
+        // 1. Reset bottom row & internal UI state first
         setupBottomRowKeyboard(null, mOriginalActionListener);
 
         // Restore UI internally
         setupCategoryTabs();
 
-        mEmojiCategoryPageIndicatorView.setVisibility(View.VISIBLE);
+        mEmojiCategoryPageIndicatorView.setVisibility(View.GONE);
         mPager.setVisibility(View.VISIBLE);
         if (mSearchContainer != null)
             mSearchContainer.setVisibility(View.GONE);
@@ -708,6 +825,23 @@ public final class EmojiPalettesView extends LinearLayout
         if (mSearchBar != null)
             mSearchBar.setText(""); // Clear text
         mSearchBar = null; // Clear reference
+        mSearchKeyboardLayoutSet = null;
+
+        // 2. Restore main action listener
+        if (mOriginalActionListener != null) {
+            PointerTracker.setKeyboardActionListener(mOriginalActionListener);
+        }
+
+        // 3. Switch to Alphabet Keyboard LAST so PointerTracker.sDrawingProxy remains mKeyboardView
+        if (isAttachedToWindow()) {
+            KeyboardSwitcher.getInstance().setAlphabetKeyboard();
+        }
+
+        if (isInLayout()) {
+            post(this::requestLayout);
+        } else {
+            requestLayout();
+        }
     }
 
     private void performSearch(String query) {
@@ -717,7 +851,11 @@ public final class EmojiPalettesView extends LinearLayout
                 mSearchAdapter.submitList(java.util.Collections.emptyList());
             // In split mode, restore recents on suggestion bar when search is empty
             if (Settings.getValues().mSplitToolbar) {
-                populateSuggestionBarWithRecents();
+                if (sDictionaryFacilitator == null) {
+                    updateSplitToolbarEmojiSuggestions();
+                } else {
+                    populateSuggestionBarWithRecents();
+                }
             }
             return;
         }
@@ -787,6 +925,7 @@ public final class EmojiPalettesView extends LinearLayout
         if (keyboardView == null || !this.isAttachedToWindow()) {
             return;
         }
+        keyboardView.setKeyPreviewPopupEnabled(Settings.getValues().mKeyPreviewPopupOn);
         EditorInfo ei = editorInfo != null ? editorInfo : mEditorInfo;
         keyboardView.setKeyboardActionListener(keyboardActionListener);
 
@@ -868,7 +1007,8 @@ public final class EmojiPalettesView extends LinearLayout
         if (mPager != null && mPager.getAdapter() != null) {
             mPager.getAdapter().notifyItemChanged(mEmojiCategory.getRecentTabId());
         }
-        if (split) {
+        // ponytail: only update suggestion bar if the emoji view is actually visible
+        if (split && isShown()) {
             populateSuggestionBarWithRecents();
         }
     }
@@ -888,7 +1028,8 @@ public final class EmojiPalettesView extends LinearLayout
         if (mPager != null && mPager.getAdapter() != null) {
             mPager.getAdapter().notifyItemChanged(mEmojiCategory.getRecentTabId());
         }
-        if (split) {
+        // ponytail: only update suggestion bar if the emoji view is actually visible
+        if (split && isShown()) {
             populateSuggestionBarWithRecents();
         }
     }
@@ -977,6 +1118,35 @@ public final class EmojiPalettesView extends LinearLayout
         });
     }
 
+    private void updateSplitToolbarEmojiSuggestions() {
+        SuggestionStripView stripView = KeyboardSwitcher.getInstance().getSuggestionStripView();
+        if (stripView == null)
+            return;
+
+        if (sDictionaryFacilitator == null) {
+            // ponytail: show download button on suggestion strip in split mode if dictionary is missing
+            stripView.setEmojiDownloadButton(() -> {
+                if ("standard".equals(BuildConfig.FLAVOR) || "standardfull".equals(BuildConfig.FLAVOR)) {
+                    downloadEmojiDictionary();
+                    mIsDownloadingEmojiDict = true;
+                    updateSplitToolbarEmojiSuggestions();
+                } else {
+                    Context ctx = getContext();
+                    Intent intent = new Intent(ctx, SettingsActivity.class);
+                    intent.putExtra("screen", "dictionaries");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(intent);
+                }
+            }, mIsDownloadingEmojiDict);
+        } else {
+            if (mSearchBar != null && !TextUtils.isEmpty(mSearchBar.getText())) {
+                performSearch(mSearchBar.getText().toString());
+            } else {
+                populateSuggestionBarWithRecents();
+            }
+        }
+    }
+
     public void setKeyboardActionListener(final KeyboardActionListener listener) {
         mKeyboardActionListener = listener;
     }
@@ -1005,10 +1175,15 @@ public final class EmojiPalettesView extends LinearLayout
                 final View old = mTabStrip.findViewWithTag((long) oldCategoryId);
                 final View current = mTabStrip.findViewWithTag((long) categoryId);
 
-                if (old instanceof ImageView)
+                if (old instanceof ImageView) {
                     Settings.getValues().mColors.setColor((ImageView) old, ColorType.EMOJI_CATEGORY);
-                if (current instanceof ImageView)
-                    Settings.getValues().mColors.setColor((ImageView) current, ColorType.EMOJI_CATEGORY_SELECTED);
+                    old.setBackgroundColor(android.graphics.Color.WHITE);
+                    Settings.getValues().mColors.setBackground((ImageView) old, ColorType.STRIP_BACKGROUND);
+                }
+                if (current instanceof ImageView) {
+                    current.setBackgroundResource(R.drawable.toolbar_key_background);
+                    Settings.getValues().mColors.setColor(current.getBackground(), ColorType.TOOL_BAR_EXPAND_KEY_BACKGROUND);
+                }
             }
         }
     }
@@ -1077,10 +1252,14 @@ public final class EmojiPalettesView extends LinearLayout
 
         Toast.makeText(getContext(), "Downloading Emoji Dictionary...", Toast.LENGTH_SHORT).show();
 
-        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+        helium314.keyboard.latin.utils.ExecutorUtils.getBackgroundExecutor(helium314.keyboard.latin.utils.ExecutorUtils.KEYBOARD).execute(() -> {
             try {
                 java.net.URL url = new java.net.URL(urlStr);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "HeliboardL/3.8.9 (Android)");
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
+                conn.setInstanceFollowRedirects(true);
                 conn.connect();
 
                 if (conn.getResponseCode() != java.net.HttpURLConnection.HTTP_OK) {
@@ -1099,13 +1278,22 @@ public final class EmojiPalettesView extends LinearLayout
                         }
                     }
 
+                    // Save download preference so AppUpgrade and cleanUnusedMainDicts do not delete it
+                    android.content.SharedPreferences prefs = helium314.keyboard.latin.utils.DeviceProtectedUtils.getSharedPreferences(getContext());
+                    prefs.edit()
+                            .putString("pref_dict_download_link_emoji_" + locale.toString(), urlStr)
+                            .putString("pref_dict_download_link_emoji_" + locale.toLanguageTag(), urlStr)
+                            .apply();
+
                     // Success! Switch back to UI thread
-                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    EmojiPalettesView.this.post(() -> {
                         Toast.makeText(getContext(), "Emoji dictionary installed!", Toast.LENGTH_SHORT).show();
+                        closeDictionaryFacilitator();
                         initDictionaryFacilitator();
+                        mIsDownloadingEmojiDict = false;
+                        updateSplitToolbarEmojiSuggestions();
                         if (mInSearchMode) {
                             stopSearchMode();
-                            startSearchMode();
                         }
                     });
                 } else {
@@ -1113,8 +1301,9 @@ public final class EmojiPalettesView extends LinearLayout
                 }
             } catch (Exception e) {
                 android.util.Log.e("EmojiSearch", "Failed to download dictionary", e);
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                EmojiPalettesView.this.post(() -> {
                     Toast.makeText(getContext(), "Failed to download dictionary", Toast.LENGTH_SHORT).show();
+                    mIsDownloadingEmojiDict = false;
                     if (mInSearchMode) {
                         stopSearchMode();
                         startSearchMode();

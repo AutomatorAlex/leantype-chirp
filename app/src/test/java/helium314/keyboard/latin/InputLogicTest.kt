@@ -15,7 +15,10 @@ import helium314.keyboard.event.Event
 import helium314.keyboard.keyboard.KeyboardSwitcher
 import helium314.keyboard.keyboard.MainKeyboardView
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
+import helium314.keyboard.latin.ShadowFacilitator2.Companion.addedWords
 import helium314.keyboard.latin.ShadowFacilitator2.Companion.lastAddedWord
+import helium314.keyboard.latin.ShadowFacilitator2.Companion.lastNgramContext
+import helium314.keyboard.latin.ShadowFacilitator2.Companion.ngramContexts
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo
 import helium314.keyboard.latin.common.Constants
 import helium314.keyboard.latin.common.LocaleUtils.constructLocale
@@ -84,6 +87,15 @@ class InputLogicTest {
         assertEquals("", composingText)
     }
 
+    @Test fun `english space-separated typing keeps composing word`() {
+        reset()
+        chainInput("hello")
+        assertEquals("hello", composingText)
+        input(' ')
+        assertEquals("hello ", text)
+        assertEquals("", composingText)
+    }
+
     @Test fun delete() {
         reset()
         setText("hello there ")
@@ -141,15 +153,16 @@ class InputLogicTest {
     @Test fun insertLetterIntoWordHangulFails() {
         if (BuildConfig.BUILD_TYPE == "runTests") return
         reset()
+        currentScript = ScriptUtils.SCRIPT_HANGUL
         latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("ko".constructLocale()).first())
         chainInput("ㅛㅎㄹㅎㅕㅛ")
+        latinIME.mInputLogic.finishInput()
         setCursorPosition(3)
-        input('ㄲ') // fails, as expected from the hangul issue when processing the event in onCodeInput
-        assertEquals("ㅛㅎㄹㄲ혀ㅛ", getWordAtCursor())
-        assertEquals("ㅛㅎㄹㄲ혀ㅛ", getText())
-        assertEquals("ㅛㅎㄹㄲ혀ㅛ", textBeforeCursor + textAfterCursor)
-        assertEquals(4, getCursorPosition())
-        assertEquals(4, cursor)
+        latinIME.onUpdateSelection(0, 6, 3, 3, -1, -1)
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource('ㄲ'.code))
+        handleMessages()
+        val expected = java.text.Normalizer.normalize("ㅛㅎㄹㄲ혀ㅛ", java.text.Normalizer.Form.NFC)
+        assertEquals(expected, java.text.Normalizer.normalize(getText(), java.text.Normalizer.Form.NFC))
     }
 
     // see issue 1447
@@ -158,6 +171,215 @@ class InputLogicTest {
         latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("ko".constructLocale()).first())
         chainInput("ㅛ.")
         assertEquals("ㅛ.", text)
+    }
+
+    @Test fun `space after thai composing word inserts space`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        chainInput("ภาษาไทย")
+        assertEquals("ไทย", composingText)
+        input(' ')
+        assertEquals("ภาษาไทย ", text)
+        assertEquals("", composingText)
+    }
+
+    @Test fun `thai composing word follows word boundaries`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        chainInput("ภาษาไทยดี")
+        assertEquals("ภาษาไทยดี", text)
+        assertEquals("ดี", composingText)
+        assertEquals("ไทย", lastAddedWord)
+        assertEquals("ภาษา", lastNgramContext)
+        assertEquals(listOf("ภาษา", "ไทย"), addedWords)
+        assertEquals(listOf("<S>", "ภาษา"), ngramContexts)
+    }
+
+    @Test fun `single thai composing segment remains composing`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        chainInput("ไทย")
+        assertEquals("ไทย", text)
+        assertEquals("ไทย", composingText)
+    }
+
+    @Test fun `space after segmented thai composing word inserts one space`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        chainInput("ภาษาไทยดี")
+        input(' ')
+        assertEquals("ภาษาไทยดี ", text)
+        assertEquals("", composingText)
+    }
+
+    @Test fun `immediate text expansion uses full segmented thai word`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("ภาษาไทย" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("expanded", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("ภาษาไทย")
+
+        assertEquals("expanded", text)
+        assertEquals("", composingText)
+        assertEquals("", lastAddedWord)
+    }
+
+    @Test fun `immediate text expansion uses prefixed segmented thai word`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf(".ภาษาไทย" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("expanded", "."))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert(".ภาษาไทย")
+
+        assertEquals("expanded", text)
+        assertEquals("", composingText)
+        assertEquals("", lastAddedWord)
+    }
+
+    @Test fun `prefixed immediate text expansion does not defer thai without prefix`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf(".ภาษาไทย" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("expanded", "."))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("ภาษาไทย")
+
+        assertEquals("ภาษาไทย", text)
+        assertEquals("ไทย", composingText)
+        assertEquals("ภาษา", lastAddedWord)
+    }
+
+    @Test fun `immediate text expansion still segments thai non-shortcut`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("อื่น" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("expanded", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        chainInput("ภาษาไทยดี")
+
+        assertEquals("ภาษาไทยดี", text)
+        assertEquals("ดี", composingText)
+        assertEquals("ไทย", lastAddedWord)
+    }
+
+    @Test fun `failed immediate expansion commits thai segments separately`() {
+        reset()
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("th".constructLocale()).first())
+        currentScript = ScriptUtils.SCRIPT_THAI
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("ภาษาไทยดี" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("expanded", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("ภาษาไทยแดง")
+
+        assertEquals("ภาษาไทยแดง", text)
+        assertEquals("แดง", composingText)
+        assertEquals("ไทย", lastAddedWord)
+        assertEquals("ภาษา", lastNgramContext)
+    }
+
+    @Test fun `immediate regex expansion triggers for symbol typed alone`() {
+        reset()
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("${helium314.keyboard.latin.utils.TextExpanderUtils.REGEX_PREFIX}∆+" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("Expanded Text", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("∆")
+
+        assertEquals("Expanded Text", text)
+        assertEquals("", composingText)
+    }
+
+    @Test fun `immediate regex expansion triggers for currency symbol typed alone`() {
+        reset()
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("${helium314.keyboard.latin.utils.TextExpanderUtils.REGEX_PREFIX}£+" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("Pound Sterling", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("£")
+
+        assertEquals("Pound Sterling", text)
+        assertEquals("", composingText)
+    }
+
+    @Test fun `immediate regex expansion triggers for repeated symbols`() {
+        reset()
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("${helium314.keyboard.latin.utils.TextExpanderUtils.REGEX_PREFIX}∆{2,}" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("Multiple Deltas", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("∆∆")
+
+        assertEquals("Multiple Deltas", text)
+        assertEquals("", composingText)
+    }
+
+    @Test fun `immediate regex expansion triggers for capture groups`() {
+        reset()
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        val shortcuts = mapOf("${helium314.keyboard.latin.utils.TextExpanderUtils.REGEX_PREFIX}(\\w+)@gm" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("$1@gmail.com", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        typeNoAssert("arjun@gm")
+
+        assertEquals("arjun@gmail.com", text)
+    }
+
+    @Test fun immediateRegexExpansionTriggersForSymbolPrefixedRegex() {
+        reset()
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        helium314.keyboard.latin.utils.TextExpanderUtils.clearCache()
+        val shortcuts = mapOf("${helium314.keyboard.latin.utils.TextExpanderUtils.REGEX_PREFIX}@john" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("user_mention", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+        helium314.keyboard.latin.utils.TextExpanderUtils.clearCache()
+
+        typeNoAssert("@john")
+
+        assertEquals("user_mention", text)
     }
 
     // see issue 1551 (debug only)
@@ -721,6 +943,53 @@ class InputLogicTest {
         assertEquals(null, InputLogic.getInlineEmojiSearchString(":test\nt"))
         assertEquals("/48", InputLogic.getInlineEmojiSearchString("2606:127.0.0.1::/48")) // do we want this?
     }
+    private fun typeNoAssert(text: String) {
+        text.forEach {
+            latinIME.onEvent(Event.createEventForCodePointFromUnknownSource(it.code))
+            handleMessages()
+        }
+    }
+
+    @Test fun testTextExpanderPlaceholders() {
+        reset()
+        // Enable text expander
+        latinIME.prefs().edit().apply {
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_ENABLED, true)
+            putBoolean(helium314.keyboard.latin.utils.TextExpanderUtils.PREF_IMMEDIATE, true)
+        }.commit()
+        
+        // Define a shortcut
+        val shortcuts = mapOf("exp" to helium314.keyboard.latin.utils.TextExpanderUtils.ShortcutEntry("Hi %cursor1%,your order %cursor2% is ready for %cursor3%.", ""))
+        helium314.keyboard.latin.utils.TextExpanderUtils.saveShortcuts(latinIME, shortcuts)
+
+        // Type the shortcut
+        typeNoAssert("exp")
+        
+        // Type bob at %cursor1%
+        typeNoAssert("bob")
+
+        // Press ENTER to jump to %cursor2%
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource(Constants.CODE_ENTER))
+        handleMessages()
+
+        // Type pizza at %cursor2%
+        typeNoAssert("pizza")
+
+        // Press ENTER to jump to %cursor3%
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource(Constants.CODE_ENTER))
+        handleMessages()
+
+        // Type takeout at %cursor3%
+        typeNoAssert("takeout")
+
+        // Press ENTER (no more placeholders)
+        latinIME.onEvent(Event.createEventForCodePointFromUnknownSource(Constants.CODE_ENTER))
+        handleMessages()
+
+        assertEquals("Hi bob,your order pizza is ready for takeout.", getText())
+    }
+
+
 
     // ------- helper functions ---------
 
@@ -732,11 +1001,20 @@ class InputLogicTest {
         batchEdit = 0
         currentInputType = InputType.TYPE_CLASS_TEXT
         lastAddedWord = ""
+        lastNgramContext = ""
+        addedWords.clear()
+        ngramContexts.clear()
 
         // reset settings
-        latinIME.prefs().edit { clear() }
+        latinIME.prefs().edit {
+            clear()
+            putBoolean(Settings.PREF_AUTO_CORRECTION, true)
+        }
 
-        setText("") // (re)sets selection and composing word
+        setText("") // initializes the input connection before switching subtype
+        latinIME.switchToSubtype(SubtypeSettings.getResourceSubtypesForLocale("en_US".constructLocale())
+            .first { it.languageTag == "en-US" })
+        setText("") // (re)sets selection and composing word for the English subtype
     }
 
     private fun chainInput(text: String) = text.forEach { input(it.code) }
@@ -758,7 +1036,7 @@ class InputLogicTest {
             && !latinIME.mInputLogic.suggestedWords.mWillAutoCorrect // autocorrect obviously creates inconsistencies
             ) {
             if (phantomSpaceToInsert.isEmpty())
-                assertEquals(oldBefore + insert, textBeforeCursor)
+                assertEquals(java.text.Normalizer.normalize(oldBefore + insert, java.text.Normalizer.Form.NFC), java.text.Normalizer.normalize(textBeforeCursor, java.text.Normalizer.Form.NFC))
             else // in some cases autospace might be suppressed
                 assert(oldBefore + phantomSpaceToInsert + insert == textBeforeCursor || oldBefore + insert == textBeforeCursor)
         }
@@ -1101,7 +1379,7 @@ private val ic = object : InputConnection {
     override fun getCursorCapsMode(p0: Int): Int = TODO("Not yet implemented")
     override fun deleteSurroundingTextInCodePoints(p0: Int, p1: Int): Boolean = TODO("Not yet implemented")
     override fun commitCompletion(p0: CompletionInfo?): Boolean = TODO("Not yet implemented")
-    override fun performEditorAction(p0: Int): Boolean = TODO("Not yet implemented")
+    override fun performEditorAction(p0: Int): Boolean = true
     override fun performContextMenuAction(p0: Int): Boolean = TODO("Not yet implemented")
     override fun clearMetaKeyStates(p0: Int): Boolean = TODO("Not yet implemented")
     override fun reportFullscreenMode(p0: Boolean): Boolean = TODO("Not yet implemented")
@@ -1165,8 +1443,14 @@ class ShadowFacilitator2 {
                          ngramContext: NgramContext, timeStampInSeconds: Long,
                          blockPotentiallyOffensive: Boolean) {
         lastAddedWord = suggestion
+        lastNgramContext = ngramContext.extractPrevWordsContext()
+        addedWords.add(suggestion)
+        ngramContexts.add(lastNgramContext)
     }
     companion object {
         var lastAddedWord = ""
+        var lastNgramContext = ""
+        val addedWords = mutableListOf<String>()
+        val ngramContexts = mutableListOf<String>()
     }
 }

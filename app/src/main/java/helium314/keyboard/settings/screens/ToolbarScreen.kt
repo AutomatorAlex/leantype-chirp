@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +39,7 @@ import helium314.keyboard.latin.utils.dpToPx
 import helium314.keyboard.latin.utils.getActivity
 import helium314.keyboard.latin.utils.getStringResourceOrName
 import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.utils.upgradeToolbarPrefs
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.Setting
 import helium314.keyboard.settings.SettingsActivity
@@ -54,8 +56,12 @@ import helium314.keyboard.settings.previewDark
 fun ToolbarScreen(
     onClickBack: () -> Unit,
 ) {
-    val prefs = LocalContext.current.prefs()
-    val b = (LocalContext.current.getActivity() as? SettingsActivity)?.prefChanged?.collectAsState()
+    val context = LocalContext.current
+    val prefs = context.prefs()
+    LaunchedEffect(Unit) {
+        upgradeToolbarPrefs(prefs)
+    }
+    val b = (context.getActivity() as? SettingsActivity)?.prefChanged?.collectAsState()
     if ((b?.value ?: 0) < 0)
         Log.v("irrelevant", "stupid way to trigger recomposition on preference change")
     val toolbarMode = Settings.readToolbarMode(prefs)
@@ -63,22 +69,24 @@ fun ToolbarScreen(
         || !prefs.getBoolean(Settings.PREF_TOOLBAR_HIDING_GLOBAL, Defaults.PREF_TOOLBAR_HIDING_GLOBAL)
     val isSplitToolbar = prefs.getBoolean(Settings.PREF_SPLIT_TOOLBAR, Defaults.PREF_SPLIT_TOOLBAR)
     val items = listOf(
-        Settings.PREF_TOOLBAR_MODE,
+        if (!isSplitToolbar) Settings.PREF_TOOLBAR_MODE else null,
         Settings.PREF_SPLIT_TOOLBAR,
+        Settings.PREF_AUTO_SPAN_TOOLBAR_KEYS,
         if (toolbarMode == ToolbarMode.HIDDEN) Settings.PREF_TOOLBAR_HIDING_GLOBAL else null,
-        if (toolbarMode in listOf(ToolbarMode.EXPANDABLE, ToolbarMode.TOOLBAR_KEYS))
-            Settings.PREF_TOOLBAR_KEYS else null,
-        if (toolbarMode in listOf(ToolbarMode.EXPANDABLE, ToolbarMode.SUGGESTION_STRIP) && !isSplitToolbar)
-            Settings.PREF_PINNED_TOOLBAR_KEYS else null,
-        if (clipboardToolbarVisible) Settings.PREF_CLIPBOARD_TOOLBAR_KEYS else null,
-        if (clipboardToolbarVisible) Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES else null,
+        Settings.PREF_TOOLBAR_KEYS,
+        if (!isSplitToolbar) Settings.PREF_PINNED_TOOLBAR_KEYS else null,
+        Settings.PREF_CLIPBOARD_TOOLBAR_KEYS,
+        Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES,
+        Settings.PREF_TOOLBAR_LONG_PRESS_HINT,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_QUICK_PIN_TOOLBAR_KEYS else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_SHOW_TOOLBAR else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_SHOW_TOOLBAR_ON_SELECT else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_HIDE_TOOLBAR else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_HIDE_PINNED_KEYS else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_REMEMBER_TOOLBAR_STATE else null,
+        if (toolbarMode != ToolbarMode.HIDDEN) Settings.PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD else null,
         if (toolbarMode != ToolbarMode.HIDDEN) Settings.PREF_VARIABLE_TOOLBAR_DIRECTION else null,
+        Settings.PREF_TOOLBAR_SWIPE_DOWN_DISMISS,
     )
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -91,7 +99,8 @@ fun createToolbarSettings(context: Context): List<Setting> {
     val filter = { name: String ->
         val lowerName = name.lowercase()
         when {
-            lowerName.startsWith("custom_ai_") -> BuildConfig.FLAVOR == "standard"
+            lowerName.startsWith("custom_ai_") -> BuildConfig.FLAVOR == "standard" || BuildConfig.FLAVOR == "standardfull" || BuildConfig.FLAVOR == "offline"
+            lowerName == "handwriting" -> BuildConfig.FLAVOR == "standardfull"
             lowerName in listOf("proofread", "translate", "clipboard_search") -> BuildConfig.FLAVOR != "offlinelite"
             else -> true
         }
@@ -111,6 +120,11 @@ fun createToolbarSettings(context: Context): List<Setting> {
         },
         Setting(context, Settings.PREF_TOOLBAR_HIDING_GLOBAL, R.string.toolbar_hiding_global) {
             SwitchPreference(it, Defaults.PREF_TOOLBAR_HIDING_GLOBAL) {
+                KeyboardSwitcher.getInstance().setThemeNeedsReload()
+            }
+        },
+        Setting(context, Settings.PREF_AUTO_SPAN_TOOLBAR_KEYS, R.string.auto_span_toolbar_keys, R.string.auto_span_toolbar_keys_summary) {
+            SwitchPreference(it, Defaults.PREF_AUTO_SPAN_TOOLBAR_KEYS) {
                 KeyboardSwitcher.getInstance().setThemeNeedsReload()
             }
         },
@@ -140,6 +154,11 @@ fun createToolbarSettings(context: Context): List<Setting> {
         {
             SwitchPreference(it, Defaults.PREF_QUICK_PIN_TOOLBAR_KEYS) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
         },
+        Setting(context, Settings.PREF_TOOLBAR_LONG_PRESS_HINT,
+            R.string.toolbar_long_press_hint, R.string.toolbar_long_press_hint_summary)
+        {
+            SwitchPreference(it, Defaults.PREF_TOOLBAR_LONG_PRESS_HINT) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+        },
         Setting(context, Settings.PREF_AUTO_SHOW_TOOLBAR, R.string.auto_show_toolbar_open, R.string.auto_show_toolbar_summary)
         {
             SwitchPreference(it, Defaults.PREF_AUTO_SHOW_TOOLBAR)
@@ -162,6 +181,18 @@ fun createToolbarSettings(context: Context): List<Setting> {
         {
             SwitchPreference(it, Defaults.PREF_REMEMBER_TOOLBAR_STATE)
         },
+        Setting(context, Settings.PREF_TOOLBAR_SWIPE_DOWN_DISMISS,
+            R.string.toolbar_swipe_down_dismiss, R.string.toolbar_swipe_down_dismiss_summary)
+        {
+            SwitchPreference(it, Defaults.PREF_TOOLBAR_SWIPE_DOWN_DISMISS)
+        },
+        Setting(context, Settings.PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD,
+            R.string.toolbar_only_with_hw_keyboard, R.string.toolbar_only_with_hw_keyboard_summary)
+        {
+            SwitchPreference(it, Defaults.PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD) {
+                KeyboardSwitcher.getInstance().setThemeNeedsReload() // necessary for updating insets
+            }
+        },
         Setting(context, Settings.PREF_VARIABLE_TOOLBAR_DIRECTION,
             R.string.var_toolbar_direction, R.string.var_toolbar_direction_summary)
         {
@@ -171,6 +202,12 @@ fun createToolbarSettings(context: Context): List<Setting> {
             val prefs = LocalContext.current.prefs()
             SwitchPreference(it, Defaults.PREF_SPLIT_TOOLBAR) { isEnabled ->
                 if (isEnabled) {
+                    val currentMode = Settings.readToolbarMode(prefs)
+                    if (currentMode == ToolbarMode.TOOLBAR_KEYS || currentMode == ToolbarMode.SUGGESTION_STRIP) {
+                        prefs.edit {
+                            putString(Settings.PREF_TOOLBAR_MODE, ToolbarMode.EXPANDABLE.name)
+                        }
+                    }
                     prefs.edit {
                         putBoolean(Settings.PREF_AUTO_SHOW_TOOLBAR, false)
                         putBoolean(Settings.PREF_AUTO_HIDE_TOOLBAR, false)
@@ -188,7 +225,19 @@ fun createToolbarSettings(context: Context): List<Setting> {
                 }
                 KeyboardSwitcher.getInstance().setThemeNeedsReload()
             }
-        }
+        },
+        if (helium314.keyboard.latin.BuildConfig.FLAVOR == "standard" || helium314.keyboard.latin.BuildConfig.FLAVOR == "standardfull") {
+            Setting(
+                context,
+                Settings.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR,
+                R.string.show_download_button_in_toolbar,
+                R.string.show_download_button_in_toolbar_summary
+            ) {
+                SwitchPreference(it, Defaults.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR) {
+                    KeyboardSwitcher.getInstance().setThemeNeedsReload()
+                }
+            }
+        } else null
     )
 }
 

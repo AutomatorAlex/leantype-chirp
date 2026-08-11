@@ -16,6 +16,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import helium314.keyboard.latin.utils.CenterCropDrawable;
 import android.view.ContextThemeWrapper;
 import android.view.inputmethod.EditorInfo;
 
@@ -77,6 +78,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_SHOW_EMOJI_DESCRIPTIONS = "show_emoji_descriptions";
     public static final String PREF_POPUP_ON = "popup_on";
     public static final String PREF_AUTO_CORRECTION = "auto_correction";
+    public static final String PREF_AUTO_CORRECT_TRIGGER = "auto_correction_trigger";
     public static final String PREF_MORE_AUTO_CORRECTION = "more_auto_correction";
     public static final String PREF_AUTO_CORRECT_THRESHOLD = "auto_correct_threshold";
     public static final String PREF_AUTOCORRECT_SHORTCUTS = "autocorrect_shortcuts";
@@ -90,9 +92,20 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_BLOCK_POTENTIALLY_OFFENSIVE = "block_potentially_offensive";
     public static final String PREF_SHOW_LANGUAGE_SWITCH_KEY = "show_language_switch_key";
     public static final String PREF_LANGUAGE_SWITCH_KEY = "language_switch_key";
+    public static final String PREF_DIRECT_IME_SWITCH_TARGET = "direct_ime_switch_target";
+    public static final String PREF_APP_LANGUAGE = "pref_app_language";
     public static final String PREF_SHOW_EMOJI_KEY = "show_emoji_key";
     public static final String PREF_VARIABLE_TOOLBAR_DIRECTION = "var_toolbar_direction";
+    public static final String PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD = "only_toolbar_with_hw_keyboard";
+    public static final String PREF_PHYSICAL_KEYBOARD_SUGGESTION_SHORTCUTS = "pref_physical_keyboard_suggestion_shortcuts";
     public static final String PREF_ADDITIONAL_SUBTYPES = "additional_subtypes";
+
+    public static final String PREF_ENABLE_SPELL_CHECKER_SERVICE = "enable_spell_checker_service";
+    public static final String PREF_ENABLE_CONTACTS_OBSERVER = "enable_contacts_observer";
+    public static final String PREF_ENABLE_CLIPBOARD_LISTENER = "enable_clipboard_listener";
+    public static final String PREF_ENABLE_SMS_OTP_RECEIVER = "enable_sms_otp_receiver";
+    public static final String PREF_ENABLE_APP_SYNC_LISTENER = "enable_app_sync_listener";
+    public static final String PREF_FOLDABLE_MODE = "pref_foldable_mode";
     public static final String PREF_ENABLE_SPLIT_KEYBOARD = "split_keyboard";
     public static final String PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE = "split_keyboard_landscape";
     public static final String PREF_SPLIT_SPACER_SCALE_PREFIX = "split_spacer_scale";
@@ -101,22 +114,33 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_SIDE_PADDING_SCALE_PREFIX = "side_padding_scale";
     public static final String PREF_FONT_SCALE = "font_scale";
     public static final String PREF_EMOJI_FONT_SCALE = "emoji_font_scale";
+    public static final String PREF_USE_SYSTEM_EMOJI = "use_system_emoji";
     public static final String PREF_EMOJI_KEY_FIT = "emoji_key_fit";
     public static final String PREF_EMOJI_SKIN_TONE = "emoji_skin_tone";
     public static final String PREF_SPACE_HORIZONTAL_SWIPE = "horizontal_space_swipe";
     public static final String PREF_SPACE_VERTICAL_SWIPE = "vertical_space_swipe";
     public static final String PREF_DELETE_SWIPE = "delete_swipe";
     public static final String PREF_AUTOSPACE_AFTER_PUNCTUATION = "autospace_after_punctuation";
+    public static final String PREF_AUTOSPACE_AFTER_EMOJI = "autospace_after_emoji";
     public static final String PREF_AUTOSPACE_AFTER_SUGGESTION = "autospace_after_suggestion";
     public static final String PREF_AUTOSPACE_AFTER_GESTURE_TYPING = "autospace_after_gesture_typing";
     public static final String PREF_AUTOSPACE_BEFORE_GESTURE_TYPING = "autospace_before_gesture_typing";
     public static final String PREF_SHIFT_REMOVES_AUTOSPACE = "shift_removes_autospace";
+    public static final String PREF_PRESERVE_SPACE_BEFORE_PUNCTUATION = "preserve_space_before_punctuation";
     public static final String PREF_ALWAYS_INCOGNITO_MODE = "always_incognito_mode";
     public static final String PREF_BIGRAM_PREDICTIONS = "next_word_prediction";
+    public static final String PREF_PRIORITIZE_PERSONAL_SUGGESTIONS = "prioritize_personal_suggestions";
+    public static final String PREF_NEXT_WORD_BOOST_LEVEL = "next_word_boost_level";
+    public static final String PREF_NEXT_WORD_STRICT_NGRAM = "next_word_strict_ngram";
+    public static final String PREF_IMMEDIATE_AUTO_SPACE = "immediate_auto_space";
+    public static final String PREF_FIRST_WORD_PREDICTIONS = "first_word_prediction";
     public static final String PREF_SUGGEST_PUNCTUATION = "suggest_punctuation";
     public static final String PREF_SUGGEST_CLIPBOARD_CONTENT = "suggest_clipboard_content";
     public static final String PREF_GESTURE_INPUT = "gesture_input";
+    // ponytail: gesture method preference key
+    public static final String PREF_GESTURE_METHOD = "gesture_method";
     public static final String PREF_VIBRATION_DURATION_SETTINGS = "vibration_duration_settings";
+    public static final String PREF_VIBRATION_AMPLITUDE_SETTINGS = "vibration_amplitude_settings";
     public static final String PREF_KEYPRESS_SOUND_VOLUME = "keypress_sound_volume";
     public static final String PREF_KEY_LONGPRESS_TIMEOUT = "key_longpress_timeout";
     public static final String PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY = "enable_emoji_alt_physical_key";
@@ -131,6 +155,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_USE_CONTACTS = "use_contacts";
     public static final String PREF_USE_APPS = "use_apps";
     public static final String PREFS_LONG_PRESS_SYMBOLS_FOR_NUMPAD = "long_press_symbols_for_numpad";
+    // ponytail: preference key to disable multi-word suggestions
+    public static final String PREF_DISABLE_MULTI_WORD_SUGGESTIONS = "disable_multi_word_suggestions";
 
     public static final String PREF_ONE_HANDED_MODE_PREFIX = "one_handed_mode_enabled";
     public static final String PREF_ONE_HANDED_GRAVITY_PREFIX = "one_handed_mode_gravity";
@@ -138,6 +164,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
 
     public static final String PREF_SHOW_NUMBER_ROW = "show_number_row";
     public static final String PREF_SHOW_NUMBER_ROW_IN_SYMBOLS = "show_number_row_in_symbols";
+    public static final String PREF_COMPACT_NUMBER_ROW_IN_SYMBOLS = "compact_number_row_in_symbols";
     public static final String PREF_LOCALIZED_NUMBER_ROW = "localized_number_row";
     public static final String PREF_SHOW_NUMBER_ROW_HINTS = "show_number_row_hints";
     public static final String PREF_CUSTOM_CURRENCY_KEY = "custom_currency_key";
@@ -152,18 +179,31 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_SPACE_TO_CHANGE_LANG = "prefs_long_press_keyboard_to_change_lang";
     public static final String PREF_LANGUAGE_SWIPE_DISTANCE = "language_swipe_distance";
     public static final String PREF_TOUCHPAD_SENSITIVITY = "touchpad_sensitivity";
+    public static final String PREF_TOUCHPAD_FULLSCREEN = "touchpad_fullscreen";
+    public static final String PREF_PERSIST_FLOATING_KEYBOARD = "persist_floating_keyboard";
+    // ponytail: persist text edit mode preference key
+    public static final String PREF_PERSIST_TEXT_EDIT_MODE = "persist_text_edit_mode";
     public static final String PREF_FORCE_AUTO_CAPS = "force_auto_caps";
     public static final String PREF_OFFLINE_TEMP = "offline_temp";
     public static final String PREF_OFFLINE_TOP_P = "offline_top_p";
+    public static final String PREF_OFFLINE_TOP_K = "offline_top_k";
+    public static final String PREF_OFFLINE_MIN_P = "offline_min_p";
+    public static final String PREF_OFFLINE_SHOW_THINKING = "offline_show_thinking";
     public static final String PREF_OFFLINE_SYSTEM_PROMPT = "offline_system_prompt";
+    public static final String PREF_OFFLINE_TRANSLATE_SYSTEM_PROMPT = "offline_translate_system_prompt";
     public static final String PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE = "offline_translate_target_language";
     public static final String PREF_OFFLINE_MAX_TOKENS = "offline_max_tokens";
     public static final String PREF_OFFLINE_KEEP_MODEL_LOADED = "offline_keep_model_loaded";
+    public static final String PREF_AI_ALLOW_INSECURE_CONNECTIONS = "ai_allow_insecure_connections";
 
     public static final String PREF_ENABLE_CLIPBOARD_HISTORY = "enable_clipboard_history";
     public static final String PREF_SUGGEST_SCREENSHOTS = "suggest_screenshots";
+    public static final String PREF_COMPRESS_SCREENSHOTS = "compress_screenshots";
+    public static final String PREF_AUTO_READ_OTP = "auto_read_otp";
     public static final String PREF_CLIPBOARD_HISTORY_RETENTION_TIME = "clipboard_history_retention_time";
     public static final String PREF_CLIPBOARD_HISTORY_PINNED_FIRST = "clipboard_history_pinned_first";
+    public static final String PREF_CLIPBOARD_FOLD_PINNED = "clipboard_fold_pinned";
+    public static final String PREF_CLEAR_CLIPBOARD_ICON = "clear_clipboard_icon";
 
     public static final String PREF_ADD_TO_PERSONAL_DICTIONARY = "add_to_personal_dictionary";
     public static final String PREF_NAVBAR_COLOR = "navbar_color";
@@ -174,12 +214,14 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_URL_DETECTION = "url_detection";
     public static final String PREF_DONT_SHOW_MISSING_DICTIONARY_DIALOG = "dont_show_missing_dict_dialog";
     public static final String PREF_QUICK_PIN_TOOLBAR_KEYS = "quick_pin_toolbar_keys";
+    public static final String PREF_TOOLBAR_LONG_PRESS_HINT = "toolbar_long_press_hint";
     public static final String PREF_DISABLE_NETWORK = "disable_network";
     public static final String PREF_PINNED_TOOLBAR_KEYS = "pinned_toolbar_keys";
     public static final String PREF_TOOLBAR_KEYS = "toolbar_keys";
     public static final String PREF_AUTO_SHOW_TOOLBAR = "auto_show_toolbar";
     public static final String PREF_AUTO_SHOW_TOOLBAR_ON_SELECT = "auto_show_toolbar_on_select";
     public static final String PREF_AUTO_HIDE_TOOLBAR = "auto_hide_toolbar";
+    public static final String PREF_TOOLBAR_SWIPE_DOWN_DISMISS = "toolbar_swipe_down_dismiss";
     public static final String PREF_AUTO_HIDE_PINNED_KEYS = "auto_hide_pinned_keys";
     public static final String PREF_REMEMBER_TOOLBAR_STATE = "remember_toolbar_state";
     public static final String PREF_TOOLBAR_EXPANDED = "toolbar_expanded";
@@ -194,6 +236,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_TOOLBAR_MODE = "toolbar_mode";
     public static final String PREF_TOOLBAR_HIDING_GLOBAL = "toolbar_hiding_global";
     public static final String PREF_SPLIT_TOOLBAR = "split_toolbar";
+    public static final String PREF_AUTO_SPAN_TOOLBAR_KEYS = "auto_span_toolbar_keys";
+    public static final String PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR = "show_download_button_in_toolbar";
 
     // Emoji
     public static final String PREF_EMOJI_MAX_SDK = "emoji_max_sdk";
@@ -205,6 +249,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_LIBRARY_CHECKSUM = "lib_checksum";
     public static final String PREF_SAVE_SUBTYPE_PER_APP = "save_subtype_per_app";
     public static final String PREF_SAVED_APP_SUBTYPE_PREFIX = "saved_app_subtype_";
+    public static final String PREF_DONT_SHOW_SPONSOR_DIALOG = "dont_show_sponsor_dialog";
+    public static final String PREF_LAST_SPONSOR_DIALOG_SHOWN = "last_sponsor_dialog_shown";
 
     private Context mContext;
     private SharedPreferences mPrefs;
@@ -239,6 +285,11 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     }
 
     public static SettingsValues getValues() {
+        if (sInstance == null || sInstance.mSettingsValues == null) {
+            if (sInstance != null && sInstance.mContext != null) {
+                sInstance.loadSettings(sInstance.mContext);
+            }
+        }
         return sInstance.mSettingsValues;
     }
 
@@ -279,6 +330,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
             ToolbarUtilsKt.clearCustomToolbarKeyCodes();
             loadSettings(mContext, mSettingsValues.mLocale, mSettingsValues.mInputAttributes, mSettingsValues.mCurrentKeyboardScript);
             StatsUtils.onLoadSettings(mSettingsValues);
+            helium314.keyboard.latin.LatinIME.sSettingsDirty = true;
         } finally {
             mSettingsValuesLock.unlock();
         }
@@ -446,14 +498,19 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     }
 
     public void writeSplitKeyboardEnabled(final boolean enabled, final boolean isLandscape) {
-        final String pref = isLandscape ? PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE : PREF_ENABLE_SPLIT_KEYBOARD;
-        mPrefs.edit().putBoolean(pref, enabled).apply();
+        final String basePref = isLandscape ? PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE : PREF_ENABLE_SPLIT_KEYBOARD;
+        final String profilePref = SettingsKt.getProfileAwarePrefKey(basePref, mSettingsValues.mScreenProfile);
+        mPrefs.edit().putBoolean(profilePref, enabled).apply();
     }
 
     public static boolean readSplitKeyboardEnabled(final SharedPreferences prefs, final boolean isLandscape) {
-        final String pref = isLandscape ? PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE : PREF_ENABLE_SPLIT_KEYBOARD;
-        return prefs.getBoolean(pref,
-                isLandscape ? Defaults.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE : Defaults.PREF_ENABLE_SPLIT_KEYBOARD);
+        return readSplitKeyboardEnabled(prefs, isLandscape, helium314.keyboard.latin.utils.ScreenProfile.COMPACT);
+    }
+
+    public static boolean readSplitKeyboardEnabled(final SharedPreferences prefs, final boolean isLandscape, final helium314.keyboard.latin.utils.ScreenProfile profile) {
+        final String basePref = isLandscape ? PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE : PREF_ENABLE_SPLIT_KEYBOARD;
+        final boolean defaultValue = profile.isLarge() || (isLandscape ? Defaults.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE : Defaults.PREF_ENABLE_SPLIT_KEYBOARD);
+        return SettingsKt.getProfileAwareBoolean(prefs, basePref, profile, defaultValue);
     }
 
     public static float readSplitSpacerScale(final SharedPreferences prefs, final boolean landscape) {
@@ -482,11 +539,15 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     }
 
     public static float readHeightScale(final SharedPreferences prefs, final boolean landscape) {
+        return readHeightScale(prefs, landscape, helium314.keyboard.latin.utils.ScreenProfile.COMPACT);
+    }
+
+    public static float readHeightScale(final SharedPreferences prefs, final boolean landscape, final helium314.keyboard.latin.utils.ScreenProfile profile) {
         final int index = SettingsKt.findIndexOfDefaultSetting(landscape);
         final Float[] defaults = Defaults.PREF_KEYBOARD_HEIGHT_SCALE;
         final float defaultValue = defaults[index];
-        return prefs.getFloat(SettingsKt.createPrefKeyForBooleanSettings(PREF_KEYBOARD_HEIGHT_SCALE_PREFIX, index, 1),
-                defaultValue);
+        final String basePref = SettingsKt.createPrefKeyForBooleanSettings(PREF_KEYBOARD_HEIGHT_SCALE_PREFIX, index, 1);
+        return SettingsKt.getProfileAwareFloat(prefs, basePref, profile, defaultValue);
     }
 
     public static boolean readHasHardwareKeyboard(final Configuration conf) {
@@ -499,6 +560,21 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
         // is NOKEYS and if it's not hidden (e.g. folded inside the device).
         return conf.keyboard != Configuration.KEYBOARD_NOKEYS
                 && conf.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES;
+    }
+
+    public boolean readShowToolbarOnly() {
+        return mSettingsValues.mHasHardwareKeyboard
+            && mPrefs.getBoolean(PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD, Defaults.PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD);
+    }
+
+    public boolean readClipboardHistoryPinnedFirst() {
+        final SharedPreferences prefs = mPrefs != null ? mPrefs : KtxKt.prefs(mContext);
+        return prefs.getBoolean(PREF_CLIPBOARD_HISTORY_PINNED_FIRST, Defaults.PREF_CLIPBOARD_HISTORY_PINNED_FIRST);
+    }
+
+    public boolean readClipboardFoldPinned() {
+        final SharedPreferences prefs = mPrefs != null ? mPrefs : KtxKt.prefs(mContext);
+        return prefs.getBoolean(PREF_CLIPBOARD_FOLD_PINNED, Defaults.PREF_CLIPBOARD_FOLD_PINNED);
     }
 
     @Nullable
@@ -515,8 +591,9 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
         if (!image.isFile())
             return null;
         try {
-            sCachedBackgroundImages[index] = new BitmapDrawable(context.getResources(),
-                    BitmapFactory.decodeFile(image.getAbsolutePath()));
+            final android.graphics.Bitmap bm = helium314.keyboard.latin.utils.BitmapUtils.decodeSampledBitmap(image, 2048, true);
+            if (bm == null) return null;
+            sCachedBackgroundImages[index] = new CenterCropDrawable(bm);
             return sCachedBackgroundImages[index];
         } catch (Exception e) {
             return null;
@@ -617,6 +694,10 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
         return mPrefs.getBoolean(PREF_SAVE_SUBTYPE_PER_APP, Defaults.PREF_SAVE_SUBTYPE_PER_APP);
     }
 
+    public boolean useSystemEmoji() {
+        return mPrefs.getBoolean(PREF_USE_SYSTEM_EMOJI, Defaults.PREF_USE_SYSTEM_EMOJI);
+    }
+
     @Nullable
     public Typeface getCustomTypeface() {
         if (!sCustomTypefaceLoaded) {
@@ -631,6 +712,9 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
 
     @Nullable
     public Typeface getCustomEmojiTypeface() {
+        if (useSystemEmoji()) {
+            return null;
+        }
         if (!sCustomEmojiTypefaceLoaded) {
             try {
                 sCachedEmojiTypeface = Typeface.createFromFile(getCustomEmojiFontFile(mContext));

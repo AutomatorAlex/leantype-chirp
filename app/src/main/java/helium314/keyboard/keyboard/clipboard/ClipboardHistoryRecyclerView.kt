@@ -34,27 +34,63 @@ class ClipboardHistoryRecyclerView @JvmOverloads constructor(
     private val undoDismissRunnable = Runnable { dismissUndoBar() }
 
     @Suppress("unused")
-    private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+    private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
         override fun onMove(recyclerView: RecyclerView, viewHolder: ViewHolder, target: ViewHolder) = false
         override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: ViewHolder): Int {
-            if (historyManager?.canRemove(viewHolder.absoluteAdapterPosition) == false)
-                return 0 // block swipe for pinned items
-            return super.getSwipeDirs(recyclerView, viewHolder)
+            val position = viewHolder.absoluteAdapterPosition
+            val entry = (adapter as? ClipboardAdapter)?.getItem(position) ?: return 0
+            val cacheIndex = historyManager?.getClips()?.indexOfFirst { it.id == entry.id } ?: -1
+            if (cacheIndex == -1) return 0
+            var dirs = 0
+            if (historyManager?.canRemove(cacheIndex) == true) {
+                dirs = dirs or ItemTouchHelper.LEFT
+            }
+            if (entry.imageUri == null && !entry.text.isNullOrEmpty()) {
+                dirs = dirs or ItemTouchHelper.RIGHT
+            }
+            return dirs
         }
         override fun onSwiped(viewHolder: ViewHolder, dir: Int) {
             val position = viewHolder.absoluteAdapterPosition
-            val deletedEntry = historyManager?.removeEntry(position)
-            adapter?.notifyItemRemoved(position)
-            if (deletedEntry != null) {
-                showUndoBar(deletedEntry)
+            val entry = (adapter as? ClipboardAdapter)?.getItem(position)
+            if (entry != null) {
+                val cacheIndex = historyManager?.getClips()?.indexOfFirst { it.id == entry.id } ?: -1
+                if (cacheIndex != -1) {
+                    if (dir == ItemTouchHelper.LEFT) {
+                        val deletedEntry = historyManager?.removeEntry(cacheIndex)
+                        if (deletedEntry != null) {
+                            (adapter as? ClipboardAdapter)?.removeDisplayItem(position)
+                            adapter?.notifyItemRemoved(position)
+                            showUndoBar(deletedEntry)
+                        }
+                        return
+                    } else if (dir == ItemTouchHelper.RIGHT) {
+                        adapter?.notifyItemChanged(position)
+                        showEditDialog(entry)
+                        return
+                    }
+                }
             }
+            // fallback in case entry or index was invalid
+            adapter?.notifyItemChanged(position)
         }
     }).attachToRecyclerView(this)
+
+    private fun showEditDialog(entry: ClipboardHistoryEntry) {
+        var view = parent
+        while (view != null && view !is ClipboardHistoryView) {
+            view = (view as? android.view.View)?.parent
+        }
+        (view as? ClipboardHistoryView)?.startEditMode(entry)
+    }
 
     private fun showUndoBar(entry: ClipboardHistoryEntry) {
         // Cancel any pending dismiss from a previous undo
         undoHandler.removeCallbacks(undoDismissRunnable)
         lastDeletedEntry = entry
+
+        // Dismiss confirmation bar if active
+        (parent as? View)?.findViewById<View>(R.id.clipboard_confirmation_bar)?.visibility = View.GONE
 
         // Find the undo bar from our parent hierarchy (it's a sibling in the FrameLayout)
         val bar = undoBar ?: (parent as? View)?.findViewById<View>(R.id.clipboard_undo_bar)

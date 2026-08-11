@@ -112,8 +112,70 @@ object DictionaryInfoUtils {
     fun getCachedDictForLocaleAndType(locale: Locale, type: String, context: Context): File? =
         getCachedDictsForLocale(locale, context).firstOrNull { it.name.substringBefore("_") == type }
 
-    fun getCachedDictsForLocale(locale: Locale, context: Context) =
-        getCacheDirectoryForLocale(locale, context)?.let { File(it).listFiles() }.orEmpty()
+    fun getFallbackVariantDirectory(locale: Locale, context: Context): File? {
+        val cacheDir = File(getWordListCacheDirectory(context))
+        if (!cacheDir.exists() || !cacheDir.isDirectory) return null
+        val subDirs = cacheDir.listFiles { file -> file.isDirectory } ?: return null
+        val matchedDirs = subDirs.filter { 
+            val dirLocale = it.name.constructLocale()
+            dirLocale.language == locale.language
+        }.sortedWith { d1, d2 ->
+            val n1 = d1.name.lowercase()
+            val n2 = d2.name.lowercase()
+            val lang = locale.language.lowercase()
+            val p1 = if (n1 == "${lang}-gb") 0 else if (n1 == "${lang}-us") 1 else 2
+            val p2 = if (n2 == "${lang}-gb") 0 else if (n2 == "${lang}-us") 1 else 2
+            p1.compareTo(p2)
+        }
+        for (dir in matchedDirs) {
+            val files = dir.listFiles()
+            if (files?.any { it.name.endsWith(USER_DICTIONARY_SUFFIX) || it.name.startsWith(MAIN_DICT_PREFIX) || it.name == MAIN_DICT_FILE_NAME || it.name.endsWith(".dict") } == true) {
+                return dir
+            }
+        }
+        return null
+    }
+
+    private fun hasMainOrUserDict(files: Array<File>?): Boolean =
+        files?.any { file ->
+            val name = file.name.lowercase()
+            name.startsWith(MAIN_DICT_PREFIX) || name == MAIN_DICT_FILE_NAME || name.endsWith(USER_DICTIONARY_SUFFIX) || (name.endsWith(".dict") && !name.startsWith("emoji"))
+        } == true
+
+    fun getCachedDictsForLocale(locale: Locale, context: Context): Array<File> {
+        val exactDir = getCacheDirectoryForLocale(locale, context)?.let { File(it) }
+        val exactFiles = exactDir?.listFiles() ?: emptyArray()
+
+        if (hasMainOrUserDict(exactFiles)) {
+            return exactFiles
+        }
+
+        val fallbackFiles = mutableListOf<File>()
+        fallbackFiles.addAll(exactFiles)
+
+        if (locale.country.isNotEmpty() || locale.variant.isNotEmpty()) {
+            val fallbackLocale = Locale(locale.language)
+            val parentDir = getCacheDirectoryForLocale(fallbackLocale, context)?.let { File(it) }
+            val parentFiles = parentDir?.listFiles()
+            if (parentFiles != null) {
+                parentFiles.forEach { file ->
+                    if (fallbackFiles.none { it.name == file.name }) fallbackFiles.add(file)
+                }
+            }
+        }
+
+        if (!hasMainOrUserDict(fallbackFiles.toTypedArray())) {
+            val variantDir = getFallbackVariantDirectory(locale, context)
+            val variantFiles = variantDir?.listFiles()
+            if (variantFiles != null) {
+                variantFiles.forEach { file ->
+                    if (fallbackFiles.none { it.name == file.name }) fallbackFiles.add(file)
+                }
+            }
+        }
+
+        return fallbackFiles.toTypedArray()
+    }
 
     fun getDictionaryFileHeaderOrNull(file: File): DictionaryHeader? {
         return try {
@@ -146,6 +208,8 @@ object DictionaryInfoUtils {
                 context.assets.open(ASSETS_DICTIONARY_FOLDER + File.separator + dictionaryFileName),
                 targetFile
             )
+            val type = dictionaryFileName.substringBefore("_")
+            context.prefs().edit().putBoolean("pref_extracted_asset_${type}_${locale.toLanguageTag()}", true).apply()
         } catch (e: IOException) {
             Log.e(TAG, "Could not extract assets dictionary $dictionaryFileName", e)
             return null

@@ -1,5 +1,5 @@
-# Keep native methods
--keepclassmembers class * {
+# Keep classes that contain native methods
+-keep class * {
     native <methods>;
 }
 
@@ -27,10 +27,37 @@
 
 # Keep java-llama.cpp classes
 -keep class de.kherud.llama.** { *; }
+-keep class org.nehuatl.llamacpp.** { *; }
 
-# ONNX Runtime configurations
--dontwarn com.google.protobuf.**
--keep class ai.onnxruntime.** { *; }
+
 
 # Fix correct service name
 -keep class helium314.keyboard.latin.utils.ProofreadService { *; }
+
+# Suppress warnings for missing library dependencies in R8 Full Mode
+-dontwarn com.google.api.client.**
+-dontwarn java.lang.management.**
+-dontwarn org.joda.time.**
+
+# Keep handwriting plugin interface and listener to prevent parameter removal/signature optimization
+-keep interface helium314.keyboard.latin.handwriting.HandwritingRecognizer {
+    <methods>;
+}
+-keep interface helium314.keyboard.latin.handwriting.ModelDownloadListener {
+    <methods>;
+}
+
+# Keep translation plugin interface to prevent parameter removal/signature optimization
+-keep interface helium314.keyboard.latin.translation.ITranslationProvider {
+    <methods>;
+}
+
+# Keep ML Kit, GMS Tasks, and Firebase components for handwriting plugin dynamic linkage
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.tasks.** { *; }
+-keep class com.google.firebase.components.** { *; }
+
+# Keep Kotlin standard library for dynamically loaded plugins
+# ponytail: keep kotlin stdlib classes to prevent NoSuchMethodError in plugin loading
+-keep class kotlin.** { *; }
+

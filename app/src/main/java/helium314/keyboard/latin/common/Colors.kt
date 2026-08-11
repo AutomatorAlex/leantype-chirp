@@ -49,6 +49,9 @@ interface Colors {
     /** get the colorInt */
     @ColorInt fun get(color: ColorType): Int
 
+    /** get the pressed state colorInt */
+    @ColorInt fun getPressedColor(color: ColorType): Int
+
     /** apply a color to the [drawable], may be through color filter or tint (with or without state list) */
     fun setColor(drawable: Drawable, color: ColorType)
 
@@ -75,7 +78,7 @@ interface Colors {
                     attr.getDrawable(R.styleable.KeyboardView_keyBackground)
             }
             else -> null // keyBackground
-        }?.mutate() ?: attr.getDrawable(R.styleable.KeyboardView_keyBackground)?.mutate()!! // keyBackground always exists
+        }?.mutate() ?: attr.getDrawable(R.styleable.KeyboardView_keyBackground)?.mutate() ?: error("keyBackground always exists in KeyboardView style")
 
         setColor(drawable, color)
         return drawable
@@ -294,6 +297,11 @@ class DynamicColors(context: Context, override val themeStyle: String, override 
         NAVIGATION_BAR -> navBar
         MORE_SUGGESTIONS_HINT, SUGGESTED_WORD, SUGGESTION_TYPED_WORD, SUGGESTION_VALID_WORD -> adjustedKeyText
         ACTION_KEY_ICON, TOOL_BAR_EXPAND_KEY -> Color.WHITE
+        EDIT_MODE_DELETE_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(accent, functionalKey, 0.4f)
+        EDIT_MODE_FUNC_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(accent, functionalKey, 0.2f)
+        EDIT_MODE_ALPHA_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(accent, functionalKey, 0.6f)
+        EDIT_MODE_NAV_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(keyBackground, functionalKey, 0.3f)
+        EDIT_MODE_JUMP_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(keyBackground, functionalKey, 0.7f)
     }
 
     override fun setColor(drawable: Drawable, color: ColorType) {
@@ -320,6 +328,7 @@ class DynamicColors(context: Context, override val themeStyle: String, override 
 
     override fun setColor(view: ImageView, color: ColorType) {
         if (color == TOOL_BAR_KEY) {
+            view.clearColorFilter()
             setColor(view.drawable, color)
             return
         }
@@ -348,17 +357,29 @@ class DynamicColors(context: Context, override val themeStyle: String, override 
                     setColor(view.background, POPUP_KEYS_BACKGROUND)
                 else view.background.colorFilter = adjustedBackgroundFilter
             MAIN_BACKGROUND -> {
-                if (keyboardBackground != null) {
+                keyboardBackground?.let { bg ->
                     if (!backgroundSetupDone && view.width > 0 && view.height > 0) {
-                        keyboardBackground = keyboardBackground!!.toBitmap(view.width, view.height).toDrawable(view.context.resources)
+                        keyboardBackground = bg.toBitmap(view.width, view.height).toDrawable(view.context.resources)
                         backgroundSetupDone = true
                     }
                     view.background = keyboardBackground
-                } else {
-                    view.background.colorFilter = backgroundFilter
-                }
+                } ?: run { view.background.colorFilter = backgroundFilter }
             }
             else -> view.background.colorFilter = backgroundFilter
+        }
+     }
+
+    override fun getPressedColor(color: ColorType): Int {
+        if (color == ColorType.ACTION_KEY_POPUP_KEYS_BACKGROUND) {
+            return if (themeStyle == STYLE_HOLO) adjustedBackground else accent
+        }
+        return if (themeStyle == STYLE_HOLO) {
+            accent
+        } else if (isNight) {
+            if (hasKeyBorders) doubleAdjustedAccent
+            else adjustedAccent
+        } else {
+            accent
         }
     }
 }
@@ -492,6 +513,11 @@ class DefaultColors (
         SUGGESTION_AUTO_CORRECT, EMOJI_CATEGORY, TOOL_BAR_KEY, TOOL_BAR_EXPAND_KEY, ONE_HANDED_MODE_BUTTON -> suggestionText
         MORE_SUGGESTIONS_HINT, SUGGESTED_WORD, SUGGESTION_TYPED_WORD, SUGGESTION_VALID_WORD -> adjustedSuggestionText
         ACTION_KEY_ICON -> Color.WHITE
+        EDIT_MODE_DELETE_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(accent, functionalKey, 0.4f)
+        EDIT_MODE_FUNC_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(accent, functionalKey, 0.2f)
+        EDIT_MODE_ALPHA_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(accent, functionalKey, 0.6f)
+        EDIT_MODE_NAV_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(keyBackground, functionalKey, 0.3f)
+        EDIT_MODE_JUMP_BACKGROUND -> androidx.core.graphics.ColorUtils.blendARGB(keyBackground, functionalKey, 0.7f)
     }
 
     override fun setColor(drawable: Drawable, color: ColorType) {
@@ -518,6 +544,7 @@ class DefaultColors (
 
     override fun setColor(view: ImageView, color: ColorType) {
         if (color == TOOL_BAR_KEY) {
+            view.clearColorFilter()
             setColor(view.drawable, color)
             return
         }
@@ -533,15 +560,13 @@ class DefaultColors (
             ONE_HANDED_MODE_BUTTON -> setColor(view.background, if (keyboardBackground == null) MAIN_BACKGROUND else STRIP_BACKGROUND)
             MORE_SUGGESTIONS_BACKGROUND -> view.background.colorFilter = backgroundFilter
             MAIN_BACKGROUND -> {
-                if (keyboardBackground != null) {
+                keyboardBackground?.let { bg ->
                     if (!backgroundSetupDone && view.width > 0 && view.height > 0) {
-                        keyboardBackground = keyboardBackground!!.toBitmap(view.width, view.height).toDrawable(view.context.resources)
+                        keyboardBackground = bg.toBitmap(view.width, view.height).toDrawable(view.context.resources)
                         backgroundSetupDone = true
                     }
                     view.background = keyboardBackground
-                } else {
-                    view.background.colorFilter = backgroundFilter
-                }
+                } ?: run { view.background.colorFilter = backgroundFilter }
             }
             else -> view.background.colorFilter = backgroundFilter
         }
@@ -554,6 +579,13 @@ class DefaultColors (
         KEY_PREVIEW_BACKGROUND -> adjustedBackgroundFilter
         ACTION_KEY_ICON -> actionKeyIconColorFilter
         else -> colorFilter(get(color)) // create color filter (not great for performance, so the frequently used filters should be stored)
+    }
+
+    override fun getPressedColor(color: ColorType): Int {
+        if (color == ColorType.POPUP_KEYS_BACKGROUND || color == ColorType.ACTION_KEY_POPUP_KEYS_BACKGROUND) {
+            return doubleAdjustedBackground
+        }
+        return brightenOrDarken(get(color), true)
     }
 }
 
@@ -572,6 +604,7 @@ class AllColors(private val colorMap: EnumMap<ColorType, Int>, override val them
 
     override fun setColor(view: ImageView, color: ColorType) {
         if (color == TOOL_BAR_KEY) {
+            view.clearColorFilter()
             setColor(view.drawable, color)
             return
         }
@@ -584,26 +617,29 @@ class AllColors(private val colorMap: EnumMap<ColorType, Int>, override val them
         when (color) {
             ONE_HANDED_MODE_BUTTON -> setColor(view.background, MAIN_BACKGROUND) // button has no separate background color
             MAIN_BACKGROUND -> {
-                if (keyboardBackground != null) {
+                keyboardBackground?.let { bg ->
                     if (!backgroundSetupDone && view.width > 0 && view.height > 0) {
-                        keyboardBackground = keyboardBackground!!.toBitmap(view.width, view.height).toDrawable(view.context.resources)
+                        keyboardBackground = bg.toBitmap(view.width, view.height).toDrawable(view.context.resources)
                         backgroundSetupDone = true
                     }
                     view.background = keyboardBackground
-                } else {
-                    setColor(view.background, color)
-                }
+                } ?: run { setColor(view.background, color) }
             }
             else -> setColor(view.background, color)
         }
     }
 
     private fun getColorFilter(color: ColorType) = colorFilters.getOrPut(color) { colorFilter(get(color)) }
+
+    override fun getPressedColor(color: ColorType): Int {
+        return brightenOrDarken(get(color), true)
+    }
 }
 
 private fun colorFilter(color: Int, mode: BlendModeCompat = BlendModeCompat.MODULATE): ColorFilter {
-    // using !! for the color filter because null is only returned for unsupported blend modes, which are not used
-    return BlendModeColorFilterCompat.createBlendModeColorFilterCompat(color, mode)!!
+    // null is only returned for unsupported blend modes, which are not used here
+    return BlendModeColorFilterCompat.createBlendModeColorFilterCompat(color, mode)
+        ?: error("unsupported blend mode for color filter: $mode")
 }
 
 private fun pressedStateList(pressed: Int, normal: Int): ColorStateList {
@@ -657,6 +693,11 @@ enum class ColorType {
     TOOL_BAR_EXPAND_KEY_BACKGROUND,
     TOOL_BAR_KEY,
     TOOL_BAR_KEY_ENABLED_BACKGROUND,
+    EDIT_MODE_DELETE_BACKGROUND,
+    EDIT_MODE_FUNC_BACKGROUND,
+    EDIT_MODE_ALPHA_BACKGROUND,
+    EDIT_MODE_NAV_BACKGROUND,
+    EDIT_MODE_JUMP_BACKGROUND,
     MAIN_BACKGROUND,
 }
 

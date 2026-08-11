@@ -67,6 +67,13 @@ public final class KeyboardId {
     public static final int ELEMENT_NUMPAD = 28;
     public static final int ELEMENT_EMOJI_BOTTOM_ROW = 29;
     public static final int ELEMENT_CLIPBOARD_BOTTOM_ROW = 30;
+    public static final int ELEMENT_HANDWRITING_BOTTOM_ROW = 31;
+    public static final int ELEMENT_TEXT_EDIT = 32;
+    public static final int ELEMENT_CUSTOM1 = 33;
+    public static final int ELEMENT_CUSTOM2 = 34;
+    public static final int ELEMENT_CUSTOM3 = 35;
+    public static final int ELEMENT_CUSTOM4 = 36;
+    public static final int ELEMENT_CUSTOM5 = 37;
 
     public final RichInputMethodSubtype mSubtype;
     public final int mWidth;
@@ -77,6 +84,7 @@ public final class KeyboardId {
     public final boolean mDeviceLocked;
     public final boolean mNumberRowEnabled;
     public final boolean mNumberRowInSymbols;
+    public final boolean mCompactNumberRowInSymbols;
     public final boolean mLanguageSwitchKeyEnabled;
     public final boolean mEmojiKeyEnabled;
     public final String mCustomActionLabel;
@@ -97,6 +105,7 @@ public final class KeyboardId {
         mDeviceLocked = params.mDeviceLocked;
         mNumberRowEnabled = params.mNumberRowEnabled;
         mNumberRowInSymbols = params.mNumberRowInSymbols;
+        mCompactNumberRowInSymbols = params.mCompactNumberRowInSymbols;
         mLanguageSwitchKeyEnabled = params.mLanguageSwitchKeyEnabled;
         mEmojiKeyEnabled = params.mEmojiKeyEnabled;
         mCustomActionLabel = (mEditorInfo.actionLabel != null)
@@ -206,7 +215,7 @@ public final class KeyboardId {
     }
 
     public boolean isEmojiClipBottomRow() {
-        return mElementId == ELEMENT_CLIPBOARD_BOTTOM_ROW || mElementId == ELEMENT_EMOJI_BOTTOM_ROW;
+        return mElementId == ELEMENT_CLIPBOARD_BOTTOM_ROW || mElementId == ELEMENT_EMOJI_BOTTOM_ROW || mElementId == ELEMENT_HANDWRITING_BOTTOM_ROW;
     }
 
     public int imeAction() {
@@ -288,6 +297,15 @@ public final class KeyboardId {
             case ELEMENT_EMOJI_CATEGORY16 -> "emojiCategory16";
             case ELEMENT_CLIPBOARD -> "clipboard";
             case ELEMENT_NUMPAD -> "numpad";
+            case ELEMENT_EMOJI_BOTTOM_ROW -> "emojiBottomRow";
+            case ELEMENT_CLIPBOARD_BOTTOM_ROW -> "clipboardBottomRow";
+            case ELEMENT_HANDWRITING_BOTTOM_ROW -> "handwritingBottomRow";
+            case ELEMENT_TEXT_EDIT -> "editing";
+            case ELEMENT_CUSTOM1 -> "custom1";
+            case ELEMENT_CUSTOM2 -> "custom2";
+            case ELEMENT_CUSTOM3 -> "custom3";
+            case ELEMENT_CUSTOM4 -> "custom4";
+            case ELEMENT_CUSTOM5 -> "custom5";
             default -> null;
         };
     }

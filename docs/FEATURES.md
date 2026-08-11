@@ -13,27 +13,39 @@ LeanType integrates with AI providers to offer advanced proofreading and transla
 | ⚙️ **[HF/OpenAI-compatible](#3-hfopenai-compatible-generic-provider)** | Use Mistral, DeepSeek, OpenRouter, etc. |
 | 🧠 **[Custom AI Keys](#4-custom-ai-keys--keywords)** | Configure custom prompts and personas. |
 | 🛡️ **[Offline Proofreading](#5-offline-proofreading-privacy-focused)** | Privacy-first, on-device AI. |
+| 📝 **[Text Expander](#6-text-expander)** | Custom text shortcut expansion. |
+| 🖱️ **[Touchpad Mode](#7-touchpad-mode)** | Full-screen touchpad gestures and controls. |
+| ✍️ **[Handwriting Input](#8-handwriting-input)** | Use handwriting recognition to draw letters directly on a canvas. |
+| 👆 **[Gesture Typing](#9-gesture-typing)** | Swipe/glide typing powered by native C++ library. |
+| ⌨️ **[Direct Switch Target IME](#10-direct-switch-target-ime)** | Switch directly to another input method using custom keycode `-10076`. |
+| 🎨 **[Custom Layouts Customization](#11-custom-layouts-customization)** | Persistent custom layout profiles and management. |
 
 ## Summary of New Features
 
 | Feature | Function | Settings Location |
 | :--- | :--- | :--- |
-| **Multi-Provider AI** | Uses Gemini, Groq, or OpenAI to proofread/rewrite text. | `AI Integration > Set AI Provider` |
+| **Multi-Provider AI** | Uses Gemini, Groq, or OpenAI to proofread/rewrite text. Fetch latest models dynamically. | `AI Integration > Set AI Provider` |
 | **Offline Proofreading** | Private, on-device AI for grammar (requires downloads). | `AI Integration > Offline Proofreading` |
-| **Custom AI Keys** | 10 toolbar keys with customizable prompts (supports hashtags). | `AI Integration > Custom Keys` |
-| **AI Translation** | Translates selected text via your configured AI provider. | Toolbar > Translate Icon |
-| **Floating Keyboard** | Detach the keyboard into a draggable window for multitasking. | Toolbar > Floating Keyboard |
-| **Touchpad Mode** | Swipe up on Spacebar to control cursor like a touchpad. | `Gesture typing > Vertical spacebar swipe` |
+| **GGUF Model Support** | Load and run highly quantized, compact GGUF models on-device for offline proofreading/translation. | `Advanced > GGUF Model (.gguf)` |
+| **Custom AI Keys** | 10 toolbar keys with custom prompts, tags (themed capsules), and toggle settings (supports hashtags). | `AI Integration > Custom Keys` |
+| **AI Translation** | Translates selected text via your configured AI provider (includes separate model selector). | Toolbar > Translate Icon |
+| **Floating Keyboard** | Detach the keyboard into a draggable window with a persistent mode option. | Toolbar > Floating Keyboard |
+| **Touchpad Mode** | Swipe up on Spacebar to control cursor, including full-screen laptop-style touchpad. | `Gesture typing > Vertical spacebar swipe` |
 | **Split Suggestions** | Separates suggestions from toolbar for quicker access. | `Appearance > Split toolbar & suggestions` |
 | **Build Variants** | Choose Standard, Offline, or Offline Lite versions. | GitHub Releases |
 | **Clear Incognito** | Shows a clear "Hat & Glasses" icon when Incognito is active. | *Automatic (when Incognito)* |
-| **Clipboard Search** | Search through your clipboard history directly. | Clipboard Toolbar > Search Icon |
+| **Clipboard Search** | Search history, undo swipe-delete, and optionally fold pinned items by default. | Clipboard Toolbar > Search Icon |
 | **Dictionary Import** | Import personal words from Google Gboard/other keyboards. | `Text correction > Dictionary > Import` |
 | **Force Auto-Caps** | Toggle to ensure automatic capitalization works reliably. | `Text correction > Auto-capitalization` |
 | **Emoji Search** | Search for emojis by name. | `Emoji Key > Search Icon` |
 | **Screenshot Suggestion** | Suggests recently taken screenshots for quick sharing. | `Text correction > Suggest recent screenshots` |
 | **Screenshot on Clipboard** | Automatically saves taken screenshots to your clipboard history. | *Automatic (when enabled)* |
 | **Clipboard Undo** | Undo swipe-to-delete on clipboard items with a timed undo bar. | *Automatic (on swipe delete)* |
+| **Text Expander** | Expand custom shortcuts using dynamic template variables (date, time, clipboard, custom placeholders). | `Text correction > Text Expander` |
+| **Handwriting Input** | Draw letters or words directly on the screen keyboard space to type (standard variant, requires plugin). | `Libraries > Handwriting Input Plugin` |
+| **Gesture Typing** | Gesture typing (swipe/glide typing) powered by the native C++ library (`libjni_latinime.so` / `libjni_latinimegoogle.so`). | `Gesture typing` |
+| **Direct Switch Target IME** | Direct input method switching using custom keycode `-10076` assigned to toolbar keys. | `Preferences > Direct Switch Target IME` |
+| **Custom Layouts** | Supports up to 5 custom layouts with persistent layout index tracking. | `Languages > Custom layouts` |
 
 ---
 
@@ -85,7 +97,7 @@ LeanType integrates with AI providers to offer advanced proofreading and transla
 | **Groq** | 🟡 Average | 🟢 Easy | High | **Speed** |
 | **Google Gemini** | 🔴 Low | 🟢 Easy | Generous | General Purpose |
 | **HF/OpenAI-compatible** | ⚙️ *Varies* | 🟡 Medium | *Varies* | **Fully Customizable** |
-| **Offline (ONNX)** | 🟢 **Best** | 🟡 Medium | ∞ Unlimited | **Privacy** |
+| **Offline (Llama)** | 🟢 **Best** | 🟡 Medium | ∞ Unlimited | **Privacy** |
 
 > [!TIP]
 > The **HF/OpenAI-compatible** option is fully customizable—you can change the API endpoint, token, and model to use *any* OpenAI-compatible service (OpenRouter, Mistral, DeepSeek, HuggingFace, etc.).
@@ -203,6 +215,12 @@ You can assign custom prompts to 10 specific keys in the toolbar. These keys can
 2.  Tap a key (1-10) to configure it.
 3.  Enter your instructions. You can use the following hashtags to control the AI's behavior and output format.
 
+### Custom Text Labels / Tags
+You can assign custom text labels (up to 12 characters) to toolbar keys instead of displaying generic AI icons:
+1. Fill in the **Tag / Label** field when configuring a custom AI key (e.g. `French`, `Rewrite`, `Reply`).
+2. Toggle **Show tags on keyboard** under **Settings > AI Integration > Custom Keys**.
+3. Custom labels will display as sleek, themed capsules directly on the keyboard toolbar.
+
 ### AI Persona Keywords
 Add these to your prompt to enforce a specific role.
 
@@ -256,27 +274,146 @@ Control how the result is inserted.
 
 **Note**: This feature is only available in the "Offline" build flavor of LeanType.
 
-Offline proofreading runs entirely on your device using the ONNX Runtime engine. No data leaves your device.
+Offline proofreading runs entirely on your device using the `llama.cpp` runtime. No data leaves your device.
 
 > [!NOTE]
 > **Status: Beta / Experimental**
-> This feature is in a test phase. The engine is designed to be compatible with various T5-based ONNX models (Basic, Quantized, KV-Cache). We encourage you to experiment with different models to find the best balance of speed and accuracy for your device.
+> Running large language models on device requires a modern smartphone with sufficient RAM (typically 6GB+). We recommend using highly quantized, compact GGUF models (e.g. Q4_K_M or IQ4_NL) for the best balance of speed, accuracy, and memory usage. The overall accuracy of proofreading and translations will depend entirely on the capabilities of the specific model you choose.
 
 ### Setup Instructions
 
-1.  **Download Model Files**: Download the **Encoder**, **Decoder**, and **Tokenizer** for your chosen model from the table below.
+1.  **Download a GGUF Model**: Download a compatible `.gguf` model file (see Recommended Models below).
 2.  **Configure App**:
     *   Go to **Settings > Advanced**.
-    *   **Encoder Model**: Select the downloaded `.onnx` encoder file.
-    *   **Decoder Model**: Select the downloaded `.onnx` decoder file.
-    *   **Tokenizer**: Select the `tokenizer.json` file.
-    *   **System Instruction**: Enter the text specified in the "System Instruction" column for your model (leave empty if specified).
+    *   **GGUF Model**: Select the downloaded `.gguf` model file.
+    *   **System Instruction**: (Optional) Customize the prompt used to guide the model when proofreading text.
+    *   **Translate Instruction**: (Optional) Customize the prompt used for translation.
+    *   **Target Language**: Select the target language for offline translation.
+    *   **Sampling Settings**: Adjust temperature, Top-K, and Top-P to control model creativity.
 
 ### Recommended Models
 
-| Model & Purpose | Performance / Size | System Instruction | Download Links (Direct) |
-| :--- | :--- | :--- | :--- |
-| **Visheratin T5 Tiny**<br>*(Grammar Correction Only)* | ⚡ **Fastest**<br>~35 MB<br>Low RAM usage | **Empty**<br>(Leave blank) | • [Encoder](https://huggingface.co/visheratin/t5-efficient-tiny-grammar-correction/resolve/main/encoder_model_quant.onnx)<br>• [Decoder](https://huggingface.co/visheratin/t5-efficient-tiny-grammar-correction/resolve/main/init_decoder_quant.onnx)<br>• [Tokenizer](https://huggingface.co/visheratin/t5-efficient-tiny-grammar-correction/tree/main) |
-| **Flan-T5 Small**<br>*(Translation & General)* | 🐢 **Slower**<br>~300 MB<br>Higher accuracy | **Required**<br>`fix grammar: `<br>or<br>`translate English to Spanish: ` | • [Encoder](https://huggingface.co/Xenova/flan-t5-small/resolve/main/onnx/encoder_model_quantized.onnx)<br>• [Decoder](https://huggingface.co/Xenova/flan-t5-small/resolve/main/onnx/decoder_model_quantized.onnx)<br>• [Tokenizer](https://huggingface.co/Xenova/flan-t5-small/tree/main) |
+*   **Llama 3.2 1B Instruct (Q4_K_M)**: Excellent general purpose compact model (~900 MB).
+*   **Qwen 2.5 1.5B Instruct (Q4_K_M)**: High accuracy and quality, fast on modern devices (~1.1 GB).
+*   **Qwen 2.5 0.5B Instruct (Q4_K_M)**: Extremely lightweight, very fast with minimal memory footprint (~350 MB).
 
-*Note: For Flan-T5, the quantized models linked above are standard recommendations. Users have also reported success with `bnb4` quantized variants if available.*
+You can find and download these models in GGUF format on HuggingFace (e.g., from users like `bartowski` or `Qwen`).
+
+---
+
+## 6. Text Expander
+
+Text Expander allows you to define custom shortcuts (abbreviations) that automatically expand into longer, structured text templates as you type.
+
+### Key Features
+*   **Custom Shortcuts**: Create abbreviations (e.g., `adr`) that expand immediately into complex blocks (e.g., your full postal address).
+*   **Dynamic Template Variables**: Enrich your expansions using dynamic variables:
+    *   `%date%` - Inserts the current local date.
+    *   `%time%` - Inserts the current local time.
+    *   `%clipboard%` - Appends the most recently copied text from your clipboard.
+    *   `%cursor%` - Positions the typing cursor here after expansion.
+    *   `%greeting%` - Inserts "Good morning", "Good afternoon", or "Good evening" depending on the hour.
+    *   `%tomorrow%` - Inserts tomorrow's date (YYYY-MM-DD).
+    *   `%bullets%` - Inserts a bullet list template (supports count suffix e.g. `%bullets_5%`).
+    *   `%list%` - Inserts a numbered list template (supports count suffix e.g. `%list_5%`).
+    *   **Custom Placeholders**: Create dynamic input fields (e.g., `%name%`) that prompt you to type a value during the expansion flow.
+
+### Configuration
+1.  Navigate to **Settings > Text correction > Text Expander**.
+2.  Tap the **+** (Add) button to create a new expansion rule.
+3.  Specify the **Shortcut** trigger and the **Expansion** template.
+4.  Include dynamic template variables in the template block.
+
+---
+
+## 7. Touchpad Mode
+
+Touchpad Mode replaces the keyboard with a laptop-style touchpad overlay to control the cursor and edit text using fluid gestures.
+
+### How to Enable
+*   **Swipe gesture**: Swipe up on the **Spacebar** to temporarily toggle Touchpad Mode.
+*   **Toolbar shortcut**: Tap the **Touchpad** icon in the toolbar for a persistent touchpad overlay.
+
+### Touchpad Gestures
+
+#### 1 Finger (Navigation & Selection)
+*   **Drag**: Moves the cursor precisely character-by-character.
+*   **Double Tap**: Selects the word under the cursor.
+*   **Long Press & Drag**: Enters text selection mode and selects text as you drag.
+
+#### 2 Fingers (Navigation, Clipboard, History & Deletion)
+*   **Drag Left/Right**: Moves the cursor horizontally word-by-word.
+*   **Swipe Up**: Undo.
+*   **Swipe Down**: Redo.
+*   **Tap**: Inserts a space character.
+*   **Double Tap**: Copies selected text (or Pastes clipboard contents if no selection exists).
+*   **Triple Tap**: Cuts selected text (or Selects All if no selection exists).
+*   **Press & Hold (Long Press)**: Deletes (backspaces) selection / word to the left. Repeats automatically if held.
+
+---
+
+## 8. Handwriting Input
+
+> [!NOTE]
+> **Availability**: This feature is only available in the **Standard** (`-standard-release.apk`) and **Standard Optimised** build flavors. It is excluded from the **Offline** and **Offline Lite** variants.
+
+LeanType integrates a handwriting recognition canvas that allows you to write characters directly on the keyboard using your finger or a stylus.
+
+### Setup Instructions
+
+1. **Install the Plugin**:
+   * Go to **Settings > Libraries**.
+   * Under **Handwriting Input Plugin**, tap **Download** to pull the latest plugin APK from the [Leantype-Handwriting-Plugin](https://github.com/LeanBitLab/Leantype-Handwriting-Plugin) GitHub repository.
+   * Alternatively, you can tap to load a locally downloaded plugin APK file.
+   * Review the security warning and confirm the installation. The app will verify and register the plugin.
+
+2. **Accessing the Handwriting Key**:
+   * The **Handwriting** icon (represented by a pencil/edit icon) is placed on your keyboard toolbar by default in supported variants.
+   * If it is not showing, you can customize the toolbar under **Settings > Preferences > Keyboard toolbar** to enable it.
+
+### How to Use
+
+1. Tap the **Handwriting** icon in the toolbar.
+2. The keyboard area will switch to a handwriting drawing canvas.
+3. Draw characters, words, or punctuation symbols on the canvas. The keyboard will automatically inputs recognized characters.
+4. Tap the **Clear (X)** button on the bottom row to clear the current drawing canvas.
+5. Tap the **Handwriting** icon again to toggle back to the standard keyboard layout.
+
+---
+
+## 9. Gesture Typing
+
+*   **Functionality**: Gesture typing (swipe/glide typing) powered by the native C++ library (`libjni_latinime.so` / `libjni_latinimegoogle.so`).
+*   **Performance**: Pure native C++ path scoring and spatial model matching for zero-lag swipe input and low memory footprint.
+*   **Library Loading**: If using the Standard flavor, the gesture library can be downloaded or loaded on demand via **Settings > Gesture typing** or **Settings > Libraries Hub**.
+*   **Settings Configuration**:
+    1. Go to **Settings > Gesture typing** (or **Text Correction**).
+    2. Toggle **Enable gesture typing**.
+    3. Configure visual options (preview trail, floating preview text, trail fadeout) and behavior options (space-aware gesture, fast typing cooldown).
+
+---
+
+## 10. Direct Switch Target IME
+
+*   **Functionality**: Switch directly to another configured input method (and subtype) instead of opening the system input method picker.
+*   **Behavior**:
+    *   Map the custom keycode `-10076` (`SWITCH_TO_USER_IME`) to any toolbar key (supports click or long-press).
+    *   Tapping/long-pressing the key immediately switches input methods.
+*   **How to Setup**:
+    1. Go to **Settings > Preferences**.
+    2. Tap **Direct Switch Target IME** and select the target keyboard/subtype from the list of enabled inputs.
+    3. Go to **Settings > Toolbar > Customize toolbar key codes** to map `-10076` to a toolbar key.
+
+---
+
+## 11. Custom Layouts Customization
+
+*   **Functionality**: Save up to five custom layout profiles with persistent active slot tracking.
+*   **Behavior**:
+    *   The active custom layout slot index is preserved across orientation changes and switching between alphabet and symbol states.
+    *   Unused custom layout profiles can be directly deleted from settings.
+*   **How to Setup**:
+    1. Go to **Settings > Languages > Custom layouts**.
+    2. Manage custom layouts and slots as needed.
+
+

@@ -57,6 +57,13 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
                 LayoutType.NUMPAD_LANDSCAPE else LayoutType.NUMPAD
             KeyboardId.ELEMENT_EMOJI_BOTTOM_ROW -> LayoutType.EMOJI_BOTTOM
             KeyboardId.ELEMENT_CLIPBOARD_BOTTOM_ROW -> LayoutType.CLIPBOARD_BOTTOM
+            KeyboardId.ELEMENT_HANDWRITING_BOTTOM_ROW -> LayoutType.HANDWRITING_BOTTOM
+            KeyboardId.ELEMENT_TEXT_EDIT -> LayoutType.EDITING
+            KeyboardId.ELEMENT_CUSTOM1 -> LayoutType.CUSTOM1
+            KeyboardId.ELEMENT_CUSTOM2 -> LayoutType.CUSTOM2
+            KeyboardId.ELEMENT_CUSTOM3 -> LayoutType.CUSTOM3
+            KeyboardId.ELEMENT_CUSTOM4 -> LayoutType.CUSTOM4
+            KeyboardId.ELEMENT_CUSTOM5 -> LayoutType.CUSTOM5
             else -> LayoutType.MAIN
         }
         val baseKeys = LayoutParser.parseLayout(layoutType, params, context)
@@ -94,14 +101,18 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
             params.mBaseWidth = params.mOccupiedWidth - params.mLeftPadding - params.mRightPadding
         }
 
-        val numberRow = getNumberRow()
+        val numberRows = getNumberRows()
+        val numberRow = numberRows.first()
         addNumberRowOrPopupKeys(baseKeys, numberRow)
         if (params.mId.isAlphabetKeyboard)
             addSymbolPopupKeys(baseKeys)
-        if (params.mId.isAlphaOrSymbolKeyboard && params.mId.mNumberRowEnabled) {
+        if (params.mId.isAlphaOrSymbolKeyboard && (params.mId.mNumberRowEnabled
+                || (!params.mId.isAlphabetKeyboard && params.mId.mNumberRowInSymbols && !params.mId.mCompactNumberRowInSymbols))) {
             val newLabelFlags = defaultLabelFlags or
                     if (Settings.getValues().mShowNumberRowHints) 0 else Key.LABEL_FLAGS_DISABLE_HINT_LABEL
-            baseKeys.add(0, numberRow.mapTo(mutableListOf()) { it.copy(newLabelFlags = newLabelFlags) })
+            numberRows.forEachIndexed { rowIndex, row ->
+                baseKeys.add(rowIndex, row.mapTo(mutableListOf()) { it.copy(newLabelFlags = newLabelFlags) })
+            }
         }
         if (!params.mAllowRedundantPopupKeys)
             params.baseKeys = baseKeys.flatMap { row -> row.map { it.toKeyParams(params) } }
@@ -264,24 +275,32 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
     }
 
     private fun addNumberRowOrPopupKeys(baseKeys: MutableList<MutableList<KeyData>>, numberRow: MutableList<KeyData>) {
-        if (!params.mId.mNumberRowEnabled && params.mId.mNumberRowInSymbols && params.mId.mElementId == KeyboardId.ELEMENT_SYMBOLS) {
+        if (!params.mId.mNumberRowEnabled && params.mId.mNumberRowInSymbols && params.mId.mCompactNumberRowInSymbols && (params.mId.mElementId == KeyboardId.ELEMENT_SYMBOLS || params.mId.mElementId == KeyboardId.ELEMENT_SYMBOLS_SHIFTED)) {
             // replace first symbols row with number row, but use the labels as popupKeys
+            val symbolsRow = baseKeys.getOrNull(0) ?: return
             val numberRowCopy = numberRow.toMutableList()
-            numberRowCopy.forEachIndexed { index, keyData -> keyData.popup.symbol = baseKeys[0].getOrNull(index)?.label }
+            numberRowCopy.forEachIndexed { index, keyData ->
+                val symbolKey = symbolsRow.getOrNull(index) ?: return@forEachIndexed
+                val symbols = mutableListOf<String>()
+                symbolKey.label.takeIf { it.isNotEmpty() }?.let { symbols.add(it) }
+                symbolKey.popup.getPopupKeyLabels(params)?.let { symbols.addAll(it) }
+                if (symbols.isNotEmpty()) keyData.popup.symbols = symbols
+            }
+            if (symbolsRow.size > numberRowCopy.size) {
+                numberRowCopy.addAll(symbolsRow.subList(numberRowCopy.size, symbolsRow.size))
+            }
             baseKeys[0] = numberRowCopy
         } else if (!params.mId.mNumberRowEnabled && params.mId.isAlphabetKeyboard && !hasBuiltInNumbers()) {
-            if (baseKeys[0].any { it.popup.main != null || !it.popup.relevant.isNullOrEmpty() } // first row of baseKeys has any layout popup key
+            val hideNumberHintsOnTopRow = baseKeys[0].any { it.popup.main != null || !it.popup.relevant.isNullOrEmpty() } // first row of baseKeys has any layout popup key
                 && params.mPopupKeyLabelSources.let {
                     val layout = it.indexOf(POPUP_KEYS_LAYOUT)
                     val number = it.indexOf(POPUP_KEYS_NUMBER)
                     layout != -1 && layout < number // layout before number label
                 }
-            ) {
-                // remove number from labels, to avoid awkward mix of numbers and others caused by layout popup keys
-                params.mPopupKeyLabelSources.remove(POPUP_KEYS_NUMBER)
+            if (!hideNumberHintsOnTopRow) {
+                // add number to the first row
+                baseKeys.first().forEachIndexed { index, keyData -> keyData.popup.numberLabel = numberRow.getOrNull(index)?.label }
             }
-            // add number to the first first row
-            baseKeys.first().forEachIndexed { index, keyData -> keyData.popup.numberLabel = numberRow.getOrNull(index)?.label }
         }
     }
 
@@ -290,37 +309,72 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         layout.forEachIndexed { i, row ->
             val baseRow = baseKeys.getOrNull(i) ?: return@forEachIndexed
             row.forEachIndexed { j, key ->
-                baseRow.getOrNull(j)?.popup?.symbol = key.label
+                val baseKey = baseRow.getOrNull(j) ?: return@forEachIndexed
+                val symbols = mutableListOf<String>()
+                key.label.takeIf { it.isNotEmpty() }?.let { symbols.add(it) }
+                key.popup.getPopupKeyLabels(params)?.let { symbols.addAll(it) }
+                if (symbols.isNotEmpty()) baseKey.popup.symbols = symbols
             }
         }
     }
 
-    private fun getNumberRow(): MutableList<KeyData> {
-        val row = LayoutParser.parseLayout(LayoutType.NUMBER_ROW, params, context).first()
+    private fun getNumberRows(): MutableList<MutableList<KeyData>> {
+        val rows = LayoutParser.parseLayout(LayoutType.NUMBER_ROW, params, context)
+        if (rows.isEmpty()) {
+            rows.add(mutableListOf())
+        }
         val localizedNumbers = params.mLocaleKeyboardInfos.localizedNumberKeys
-        if (localizedNumbers?.size != 10) return row
-        if (Settings.getValues().mLocalizedNumberRow) {
-            // replace 0-9 with localized numbers, and move latin number into popup
-            for (i in row.indices) {
-                val key = row[i]
-                val number = key.label.toIntOrNull() ?: continue
-                when (number) {
-                    0 -> row[i] = key.copy(newLabel = localizedNumbers[9], newCode = KeyCode.UNSPECIFIED, newPopup = SimplePopups(listOf(key.label)).merge(key.popup))
-                    in 1..9 -> row[i] = key.copy(newLabel = localizedNumbers[number - 1], newCode = KeyCode.UNSPECIFIED, newPopup = SimplePopups(listOf(key.label)).merge(key.popup))
-                }
-            }
-        } else {
-            // add localized numbers to popups on 0-9
-            for (i in row.indices) {
-                val key = row[i]
-                val number = key.label.toIntOrNull() ?: continue
-                when (number) {
-                    0 -> row[i] = key.copy(newPopup = SimplePopups(listOf(localizedNumbers[9])).merge(key.popup))
-                    in 1..9 -> row[i] = key.copy(newPopup = SimplePopups(listOf(localizedNumbers[number - 1])).merge(key.popup))
+        if (localizedNumbers?.size == 10) {
+            for (row in rows) {
+                if (Settings.getValues().mLocalizedNumberRow) {
+                    // replace 0-9 with localized numbers, and move latin number into popup
+                    for (i in row.indices) {
+                        val key = row[i]
+                        val number = key.label.toIntOrNull() ?: continue
+                        when (number) {
+                            0 -> row[i] = key.copy(newLabel = localizedNumbers[9], newCode = KeyCode.UNSPECIFIED, newPopup = SimplePopups(listOf(key.label)).merge(key.popup))
+                            in 1..9 -> row[i] = key.copy(newLabel = localizedNumbers[number - 1], newCode = KeyCode.UNSPECIFIED, newPopup = SimplePopups(listOf(key.label)).merge(key.popup))
+                        }
+                    }
+                } else {
+                    // add localized numbers to popups on 0-9
+                    for (i in row.indices) {
+                        val key = row[i]
+                        val number = key.label.toIntOrNull() ?: continue
+                        when (number) {
+                            0 -> row[i] = key.copy(newPopup = SimplePopups(listOf(localizedNumbers[9])).merge(key.popup))
+                            in 1..9 -> row[i] = key.copy(newPopup = SimplePopups(listOf(localizedNumbers[number - 1])).merge(key.popup))
+                        }
+                    }
                 }
             }
         }
-        return row
+        if (params.mId.mElementId == KeyboardId.ELEMENT_SYMBOLS_SHIFTED) {
+            for (row in rows) {
+                for (i in row.indices) {
+                    row[i] = shiftKeyData(row[i])
+                }
+            }
+        }
+        return rows
+    }
+
+    private fun getNumberRow(): MutableList<KeyData> {
+        return getNumberRows().first()
+    }
+
+    private fun shiftKeyData(key: KeyData): KeyData {
+        val popupLabels = key.popup.getPopupKeyLabels(params) ?: return key
+        val shiftedLabel = popupLabels.firstOrNull() ?: return key
+        val remainingPopups = popupLabels.drop(1)
+        val newPopupList = mutableListOf(key.label)
+        newPopupList.addAll(remainingPopups)
+        val newCode = if (shiftedLabel.length == 1) Character.codePointAt(shiftedLabel, 0) else KeyCode.UNSPECIFIED
+        return key.copy(
+            newLabel = shiftedLabel,
+            newCode = newCode,
+            newPopup = SimplePopups(newPopupList)
+        )
     }
 
     // some layouts have numbers hardcoded in the main layout (pcqwerty as keys, and others as popups)

@@ -47,6 +47,9 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     private var initialSubtype: InputMethodSubtype? = null
     private var subtypeSwitchCount = 0
 
+    // space swipe state
+    private var isSpaceSwipeActive = false
+
     override fun onPressKey(primaryCode: Int, repeatCount: Int, isSinglePointer: Boolean, hapticEvent: HapticEvent) {
         metaOnPressKey(primaryCode)
         keyboardSwitcher.onPressKey(primaryCode, isSinglePointer, latinIME.currentAutoCapsState, latinIME.currentRecapitalizeState)
@@ -77,6 +80,21 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         if (!ProductionFlags.IS_HARDWARE_KEYBOARD_SUPPORTED)
             return false
 
+        val mode = settings.current.mPhysicalKeyboardSuggestionShortcuts
+        if (mode != "disabled" && keyCode >= KeyEvent.KEYCODE_1 && keyCode <= KeyEvent.KEYCODE_9) {
+            val visualPos = keyCode - KeyEvent.KEYCODE_1
+            val isMatchingTrigger = when (mode) {
+                "alt" -> keyEvent.isAltPressed && !keyEvent.isCtrlPressed
+                "ctrl" -> keyEvent.isCtrlPressed && !keyEvent.isAltPressed
+                "number" -> inputLogic.isComposingWord || (keyboardSwitcher.suggestionStripView?.visibility == android.view.View.VISIBLE)
+                else -> false
+            }
+            if (isMatchingTrigger) {
+                val picked = keyboardSwitcher.suggestionStripView?.pickSuggestionByVisualPosition(visualPos) ?: false
+                if (picked) return true
+            }
+        }
+
         val event: Event
         if (settings.current.mLocale.language == "ko") { // todo: this does not appear to be the right place
             val subtype = keyboardSwitcher.keyboard?.mId?.mSubtype ?: RichInputMethodManager.getInstance().currentSubtype
@@ -99,7 +117,49 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     }
 
     override fun onCodeInput(primaryCode: Int, x: Int, y: Int, isKeyRepeat: Boolean) {
+        val isArrow = primaryCode == KeyCode.ARROW_LEFT || primaryCode == KeyCode.ARROW_RIGHT || primaryCode == KeyCode.ARROW_UP || primaryCode == KeyCode.ARROW_DOWN
+        if (isArrow) {
+            val isSelecting = keyboardSwitcher.keyboard?.mId?.isAlphabetShiftedManually == true || sPersistentSelectionModeActive
+            if (isSelecting) {
+                val androidKeyCode = when (primaryCode) {
+                    KeyCode.ARROW_LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
+                    KeyCode.ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
+                    KeyCode.ARROW_UP -> KeyEvent.KEYCODE_DPAD_UP
+                    KeyCode.ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
+                    else -> 0
+                }
+                if (androidKeyCode != 0) {
+                    val eventTime = android.os.SystemClock.uptimeMillis()
+                    connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0))
+                    connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, androidKeyCode, 0, KeyEvent.META_SHIFT_ON))
+                    connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, androidKeyCode, 0, KeyEvent.META_SHIFT_ON))
+                    connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0))
+                }
+                return
+            }
+        }
         when (primaryCode) {
+            KeyCode.TOGGLE_SELECTION_MODE -> {
+                sPersistentSelectionModeActive = !sPersistentSelectionModeActive
+                keyboardSwitcher.mainKeyboardView?.invalidateAllKeys()
+                keyboardSwitcher.suggestionStripView?.findViewById<android.view.ViewGroup>(R.id.toolbar)?.let {
+                    helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange(it, Settings.PREF_AUTO_CORRECTION)
+                }
+                return
+            }
+            KeyCode.ALPHA -> {
+                sPersistentTextEditModeActive = false
+                sPersistentSelectionModeActive = false
+                keyboardSwitcher.hideTextEditView()
+            }
+            KeyCode.HANDWRITING -> {
+                if (keyboardSwitcher.isHandwritingShowing) {
+                    keyboardSwitcher.setAlphabetKeyboard()
+                } else {
+                    keyboardSwitcher.setHandwritingKeyboard()
+                }
+                return
+            }
             KeyCode.TOGGLE_AUTOCORRECT -> return settings.toggleAutoCorrect()
             KeyCode.TOGGLE_INCOGNITO_MODE -> {
                 settings.toggleAlwaysIncognitoMode()
@@ -107,20 +167,99 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
                 keyboardSwitcher.mainKeyboardView?.invalidateAllKeys()
                 return
             }
+            KeyCode.TOGGLE_TOUCHPAD_MODE -> {
+                PointerTracker.sPersistentTouchpadModeActive = !PointerTracker.sPersistentTouchpadModeActive
+                if (PointerTracker.sPersistentTouchpadModeActive) {
+                    sPersistentTextEditModeActive = false
+                    keyboardSwitcher.hideTextEditView()
+                    
+                    val touchpadView = keyboardSwitcher.touchpadView
+                    if (touchpadView != null) {
+                        setupTouchpadListener(touchpadView)
+                        keyboardSwitcher.showTouchpadView()
+                    }
+                } else {
+                    keyboardSwitcher.hideTouchpadView()
+                }
+                return
+            }
+            KeyCode.TOGGLE_TEXT_EDIT_MODE -> {
+                sPersistentTextEditModeActive = !sPersistentTextEditModeActive
+                if (sPersistentTextEditModeActive) {
+                    PointerTracker.sPersistentTouchpadModeActive = false
+                    keyboardSwitcher.hideTouchpadView()
+                    keyboardSwitcher.showTextEditView()
+                } else {
+                    keyboardSwitcher.hideTextEditView()
+                }
+                return
+            }
+            KeyCode.FORWARD_DELETE -> {
+                val connection = inputLogic.connection
+                val eventTime = android.os.SystemClock.uptimeMillis()
+                connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL, 0, 0))
+                connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_FORWARD_DEL, 0, 0))
+                return
+            }
+            KeyCode.SHIFT -> {
+                if (keyboardSwitcher.keyboard?.mId?.mElementId == KeyboardId.ELEMENT_TEXT_EDIT || sPersistentTextEditModeActive) {
+                    if (inputLogic.connection.hasSelection()) {
+                        inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                    } else {
+                        sPersistentSelectionModeActive = !sPersistentSelectionModeActive
+                        keyboardSwitcher.mainKeyboardView?.invalidateAllKeys()
+                    }
+                    return
+                }
+            }
+            KeyCode.CAPS_LOCK -> {
+                if (keyboardSwitcher.keyboard?.mId?.mElementId == KeyboardId.ELEMENT_TEXT_EDIT || sPersistentTextEditModeActive) {
+                    if (inputLogic.connection.hasSelection()) {
+                        inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                    } else {
+                        sPersistentSelectionModeActive = true
+                        keyboardSwitcher.mainKeyboardView?.invalidateAllKeys()
+                    }
+                    return
+                }
+            }
+            KeyCode.DELETE_WORD -> {
+                val connection = inputLogic.connection
+                val eventTime = android.os.SystemClock.uptimeMillis()
+                connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, 0, KeyEvent.META_CTRL_ON))
+                connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL, 0, KeyEvent.META_CTRL_ON))
+                return
+            }
+            KeyCode.FORWARD_DELETE_WORD -> {
+                val connection = inputLogic.connection
+                val eventTime = android.os.SystemClock.uptimeMillis()
+                connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL, 0, KeyEvent.META_CTRL_ON))
+                connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_FORWARD_DEL, 0, KeyEvent.META_CTRL_ON))
+                return
+            }
+            KeyCode.CLIPBOARD_COPY_ALL -> {
+                inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_SELECT_ALL, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_COPY, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                return
+            }
         }
         val mkv = keyboardSwitcher.mainKeyboardView
 
+        val isEditingNav = primaryCode == KeyCode.WORD_LEFT || primaryCode == KeyCode.WORD_RIGHT
+                || primaryCode == KeyCode.MOVE_START_OF_PAGE || primaryCode == KeyCode.MOVE_END_OF_PAGE
+                || primaryCode == KeyCode.MOVE_START_OF_LINE || primaryCode == KeyCode.MOVE_END_OF_LINE
+                || primaryCode == KeyCode.PAGE_UP || primaryCode == KeyCode.PAGE_DOWN
+        val eventMetaState = if (isEditingNav && (keyboardSwitcher.keyboard?.mId?.isAlphabetShiftedManually == true || sPersistentSelectionModeActive)) {
+            metaState or KeyEvent.META_SHIFT_ON
+        } else {
+            metaState
+        }
+
         // checking if the character is a combining accent
         val event = if (primaryCode in combiningRange) { // todo: should this be done later, maybe in inputLogic?
-            Event.createSoftwareDeadEvent(primaryCode, 0, metaState, mkv.getKeyX(x), mkv.getKeyY(y), null)
+            Event.createSoftwareDeadEvent(primaryCode, 0, eventMetaState, mkv.getKeyX(x), mkv.getKeyY(y), null)
         } else {
-            // todo:
-            //  setting meta shift should only be done for arrow and similar cursor movement keys
-            //  should only be enabled once it works more reliably (currently depends on app for some reason)
-//            if (mkv.keyboard?.mId?.isAlphabetShiftedManually == true)
-//                Event.createSoftwareKeypressEvent(primaryCode, metaState or KeyEvent.META_SHIFT_ON, mkv.getKeyX(x), mkv.getKeyY(y), isKeyRepeat)
-//            else Event.createSoftwareKeypressEvent(primaryCode, metaState, mkv.getKeyX(x), mkv.getKeyY(y), isKeyRepeat)
-            Event.createSoftwareKeypressEvent(primaryCode, metaState, mkv.getKeyX(x), mkv.getKeyY(y), isKeyRepeat)
+            Event.createSoftwareKeypressEvent(primaryCode, eventMetaState, mkv.getKeyX(x), mkv.getKeyY(y), isKeyRepeat)
         }
         latinIME.onEvent(event)
         metaAfterCodeInput(primaryCode)
@@ -185,6 +324,10 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     override fun onEndSpaceSwipe(){
         initialSubtype = null
         subtypeSwitchCount = 0
+        if (isSpaceSwipeActive) {
+            isSpaceSwipeActive = false
+            inputLogic.restartSuggestionsOnWordTouchedByCursor(settings.current)
+        }
     }
 
     override fun toggleNumpad(withSliding: Boolean, forceReturnToAlpha: Boolean): Boolean {
@@ -225,6 +368,10 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         if (!connection.hasSelection()) return
         inputLogic.finishInput()
         onCodeInput(KeyCode.DELETE, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+        keyboardSwitcher.requestUpdatingShiftState(
+            inputLogic.getCurrentAutoCapsState(settings.current),
+            inputLogic.getCurrentRecapitalizeState()
+        )
     }
 
     override fun resetMetaState() {
@@ -277,6 +424,40 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         // for RTL languages we want to invert pointer movement
         val rtl = RichInputMethodManager.getInstance().currentSubtype.isRtlSubtype
         val steps = if (rtl) -rawSteps else rawSteps
+
+        val isSelecting = keyboardSwitcher.keyboard?.mId?.isAlphabetShiftedManually == true || sPersistentSelectionModeActive
+        if (isSelecting) {
+            val code = if (steps < 0) {
+                gestureMoveBackHaptics()
+                if (rtl) KeyCode.ARROW_RIGHT else KeyCode.ARROW_LEFT
+            } else {
+                gestureMoveForwardHaptics(true)
+                if (rtl) KeyCode.ARROW_LEFT else KeyCode.ARROW_RIGHT
+            }
+            repeat(abs(steps)) {
+                onCodeInput(code, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            return true
+        }
+
+        // Web editors (Chromium, Firefox, etc.) handle direct setSelection badly during fast swipes,
+        // often resulting in focus loss, caret hiding, or composition desynchronization.
+        // Fall back to sending simulated arrow keys, which is fast, asynchronous, and robust.
+        val isWebEditText = (InputType.TYPE_MASK_VARIATION and Settings.getValues().mInputAttributes.mInputType) == InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT
+        if (isWebEditText) {
+            val code = if (steps < 0) {
+                gestureMoveBackHaptics()
+                if (rtl) KeyCode.ARROW_RIGHT else KeyCode.ARROW_LEFT
+            } else {
+                gestureMoveForwardHaptics(true)
+                if (rtl) KeyCode.ARROW_LEFT else KeyCode.ARROW_RIGHT
+            }
+            repeat(abs(steps)) {
+                onCodeInput(code, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            return true
+        }
+
         val moveSteps: Int
         if (steps < 0) {
             val text = connection.getTextBeforeCursor(-steps * 4, 0) ?: return false
@@ -333,10 +514,12 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             return true
         }
 
-        inputLogic.finishInput()
+        if (!isSpaceSwipeActive) {
+            isSpaceSwipeActive = true
+            inputLogic.finishInput()
+        }
         val newPosition = connection.expectedSelectionStart + moveSteps
         connection.setSelection(newPosition, newPosition)
-        inputLogic.restartSuggestionsOnWordTouchedByCursor(settings.current)
         return true
     }
 
@@ -491,7 +674,89 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         }
     }
 
+    fun setupTouchpadListener(touchpadView: TouchpadView) {
+        touchpadView.setTouchpadListener(object : TouchpadView.TouchpadListener {
+            override fun onCursorMove(keyCode: Int, isSelecting: Boolean) {
+                if (isSelecting) {
+                    val androidKeyCode = when (keyCode) {
+                        KeyCode.ARROW_UP -> KeyEvent.KEYCODE_DPAD_UP
+                        KeyCode.ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
+                        KeyCode.ARROW_LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
+                        KeyCode.ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
+                        else -> 0
+                    }
+                    if (androidKeyCode != 0) {
+                        val eventTime = android.os.SystemClock.uptimeMillis()
+                        // Send SHIFT down to force selection mode at the InputConnection level
+                        connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0))
+                        
+                        connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, androidKeyCode, 0, KeyEvent.META_SHIFT_ON))
+                        connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, androidKeyCode, 0, KeyEvent.META_SHIFT_ON))
+                        
+                        // Release SHIFT
+                        connection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0))
+                    }
+                } else {
+                    onCodeInput(keyCode, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                }
+            }
+            override fun onSingleTap() {
+                onCodeInput(Constants.CODE_SPACE, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            override fun onDoubleTap() {
+                onCodeInput(KeyCode.CLIPBOARD_SELECT_WORD, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            override fun onScroll(direction: Int) {
+                onCodeInput(direction, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            override fun onTwoFingerDoubleTap() {
+                if (connection.hasSelection()) {
+                    onCodeInput(KeyCode.CLIPBOARD_COPY, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                } else {
+                    onCodeInput(KeyCode.CLIPBOARD_PASTE, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                }
+            }
+            override fun onThreeFingerTap() {
+                onCodeInput(KeyCode.CLIPBOARD_PASTE, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            override fun onThreeFingerDoubleTap() {
+                if (connection.hasSelection()) {
+                    onCodeInput(KeyCode.CLIPBOARD_CUT, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                } else {
+                    onCodeInput(KeyCode.CLIPBOARD_SELECT_ALL, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                }
+            }
+            override fun onThreeFingerSwipeLeft() {
+                if (connection.hasSelection()) {
+                    onCodeInput(KeyCode.DELETE, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                } else {
+                    onCodeInput(KeyCode.CLIPBOARD_SELECT_WORD, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                    onCodeInput(KeyCode.DELETE, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+                }
+            }
+            override fun onThreeFingerSwipeRight() {
+                // Empty for future use
+            }
+            override fun onThreeFingerSwipeUp() {
+                onCodeInput(KeyCode.UNDO, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            override fun onThreeFingerSwipeDown() {
+                onCodeInput(KeyCode.REDO, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+            }
+            override fun onClose() {
+                PointerTracker.sPersistentTouchpadModeActive = false
+                keyboardSwitcher.hideTouchpadView()
+            }
+        })
+    }
+
+
+
     companion object {
+        @JvmField
+        var sPersistentTextEditModeActive = false
+        @JvmField
+        var sPersistentSelectionModeActive = false
         private enum class MetaPressState {
             UNSET, // default state, not active
             SET, // enabled without onPressKey (e.g. in popup)

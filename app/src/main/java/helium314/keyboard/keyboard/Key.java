@@ -296,7 +296,11 @@ public class Key implements Comparable<Key> {
         mCode = outputText == null ? code : KeyCode.MULTIPLE_CODE_POINTS;
         mLabel = outputText == null ? StringUtils.newSingleCodePointString(code) : outputText;
         mHintLabel = labelHint;
-        mLabelFlags = key.mLabelFlags;
+        if (mLabel != null && isEmoticon(mLabel)) {
+            mLabelFlags = LABEL_FLAGS_FONT_NORMAL | LABEL_FLAGS_AUTO_SCALE;
+        } else {
+            mLabelFlags = key.mLabelFlags;
+        }
         mIconName = key.mIconName;
         mWidth = key.mWidth;
         mHeight = key.mHeight;
@@ -316,6 +320,19 @@ public class Key implements Comparable<Key> {
         // Key state.
         mPressed = key.mPressed;
         mEnabled = key.mEnabled;
+    }
+
+    private static boolean isEmoticon(@Nullable final String text) {
+        if (text == null || text.length() < 2) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            final char c = text.charAt(i);
+            if (c >= 33 && c <= 126) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** constructor from KeyParams */
@@ -1256,6 +1273,7 @@ public class Key implements Comparable<Key> {
             // action flags don't need to be specified, they can be deduced from the key
             if (mCode == Constants.CODE_SPACE
                     || mCode == KeyCode.LANGUAGE_SWITCH
+                    || mCode == KeyCode.CLEAR_HANDWRITING
                     || (mCode == KeyCode.SYMBOL_ALPHA && !params.mId.isAlphabetKeyboard()))
                 actionFlags |= ACTION_FLAGS_ENABLE_LONG_PRESS;
             if (mCode <= Constants.CODE_SPACE && mCode != KeyCode.MULTIPLE_CODE_POINTS && mIconName == null)

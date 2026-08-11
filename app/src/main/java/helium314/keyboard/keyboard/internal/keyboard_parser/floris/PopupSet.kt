@@ -28,7 +28,7 @@ open class PopupSet<T : AbstractKeyData>(
     open fun isEmpty(): Boolean = main == null && relevant.isNullOrEmpty()
 
     var numberLabel: String? = null
-    var symbol: String? = null // maybe list of keys?
+    var symbols: Collection<String>? = null
 
     fun <U : AbstractKeyData> merge(other: PopupSet<U>?): PopupSet<out AbstractKeyData> {
         if (other == null || other.isEmpty()) return this
@@ -42,8 +42,9 @@ open class PopupSet<T : AbstractKeyData>(
         }
         val newMain = if (main == null) other.main else main
         val newRelevant = addCollections(relevant, other.relevant)
-        if (main != null && other.main != null)
-            return PopupSet(newMain, addCollections(listOf(other.main!!), newRelevant))
+        val otherMain = other.main
+        if (main != null && otherMain != null)
+            return PopupSet(newMain, addCollections(listOf(otherMain), newRelevant))
         return PopupSet(newMain, newRelevant)
     }
 }

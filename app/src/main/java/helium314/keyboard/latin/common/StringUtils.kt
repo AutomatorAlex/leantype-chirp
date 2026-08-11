@@ -7,7 +7,6 @@ import helium314.keyboard.latin.common.StringUtils.mightBeEmoji
 import helium314.keyboard.latin.common.StringUtils.newSingleCodePointString
 import helium314.keyboard.latin.settings.SpacingAndPunctuations
 import helium314.keyboard.latin.utils.ScriptUtils
-import helium314.keyboard.latin.utils.SpacedTokens
 import helium314.keyboard.latin.utils.SpannableStringUtils
 import helium314.keyboard.latin.utils.TextRange
 import java.math.BigInteger
@@ -62,15 +61,35 @@ fun hasLetterBeforeLastSpaceBeforeCursor(text: CharSequence): Boolean {
     return false
 }
 
+private fun isEmojiSequenceEnd(text: String, lastCodepoint: Int): Boolean {
+    if (lastCodepoint == 0x200D || lastCodepoint == 0xFE0F || lastCodepoint in 0x1F3FB..0x1F3FF) {
+        val len = Character.charCount(lastCodepoint)
+        if (text.length <= len) return false
+        val prevCp = text.codePointBefore(text.length - len)
+        return mightBeEmoji(prevCp)
+    }
+    if (lastCodepoint in '0'.code..'9'.code || lastCodepoint == '#'.code || lastCodepoint == '*'.code) {
+        return false
+    }
+    return mightBeEmoji(lastCodepoint)
+}
+
 /** get the complete emoji at end of [text], considering that emojis can be joined with ZWJ resulting in different emojis */
 fun getFullEmojiAtEnd(text: CharSequence): String {
     val s = text.toString()
     var offset = s.length
+    if (offset == 0) return ""
+    val lastCodepoint = s.codePointBefore(offset)
+    if (!isEmojiSequenceEnd(s, lastCodepoint)) return ""
+
     while (offset > 0) {
         val codepoint = s.codePointBefore(offset)
         // continue if codepoint could be emoji, or if it's followed by a variation selector
-        if (!(mightBeEmoji(codepoint) || (offset <= s.lastIndex && (s[offset].code == 0xFE0F || s[offset].code == 0xFE0E))))
-            return text.substring(offset)
+        if (!(mightBeEmoji(codepoint) || (offset <= s.lastIndex && (s[offset].code == 0xFE0F || s[offset].code == 0xFE0E)))) {
+            val result = s.substring(offset)
+            if (isEmoji(result)) return result
+            return s.substring(s.length - Character.charCount(lastCodepoint))
+        }
         offset -= Character.charCount(codepoint)
         if (offset > 0 && s[offset - 1].code == KeyCode.ZWJ) {
             // todo: this appends ZWJ in weird cases like text, ZWJ, emoji
@@ -80,10 +99,10 @@ fun getFullEmojiAtEnd(text: CharSequence): String {
         }
 
         if (codepoint in 0x1F3FB..0x1F3FF) {
-            // Skin tones are not added with ZWJ, but just appended. This is not nice as they can be emojis on their own,
-            // but that's how it is done. Assume that an emoji before the skin tone will get merged (usually correct in practice)
+            // Skin tones are not added with ZWJ, but just appended.
+            // Assume that an emoji before the skin tone will get merged
             val codepointBefore = s.codePointBefore(offset)
-            if (isEmoji(codepointBefore)) {
+            if (mightBeEmoji(codepointBefore)) {
                 offset -= Character.charCount(codepointBefore)
                 continue
             }
@@ -92,7 +111,9 @@ fun getFullEmojiAtEnd(text: CharSequence): String {
         val textToCheck = s.substring(offset)
         if (isEmoji(textToCheck)) return textToCheck
     }
-    return s.substring(offset)
+    val result = s.substring(offset)
+    if (isEmoji(result)) return result
+    return if (offset == 0) result else s.substring(s.length - Character.charCount(lastCodepoint))
 }
 
 /**
@@ -272,7 +293,7 @@ fun isEmoji(c: Int): Boolean = mightBeEmoji(c) && isEmoji(newSingleCodePointStri
 /** returns whether the text is a single emoji */
 fun isEmoji(text: CharSequence): Boolean = mightBeEmoji(text) && text.matches(emoRegex)
 
-fun String.splitOnWhitespace() = SpacedTokens(this).toList()
+fun String.splitOnWhitespace() = split(Regex("\\s+")).filter { it.isNotEmpty() }
 
 // from https://github.com/mathiasbynens/emoji-test-regex-pattern, MIT license
 // matches single emojis only

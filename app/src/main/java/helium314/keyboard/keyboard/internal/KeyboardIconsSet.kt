@@ -27,8 +27,27 @@ class KeyboardIconsSet private constructor() {
             KeyboardTheme.STYLE_ROUNDED -> keyboardIconsRounded
             else -> keyboardIconsMaterial
         }
+        val clearClipboardIconPref = prefs.getString(Settings.PREF_CLEAR_CLIPBOARD_ICON, Defaults.PREF_CLEAR_CLIPBOARD_ICON) ?: Defaults.PREF_CLEAR_CLIPBOARD_ICON
+        val clearClipboardResId = when (clearClipboardIconPref) {
+            "legacy" -> when (iconStyle) {
+                KeyboardTheme.STYLE_HOLO -> R.drawable.sym_keyboard_clear_clipboard_holo
+                KeyboardTheme.STYLE_ROUNDED -> R.drawable.sym_keyboard_clear_clipboard_rounded
+                else -> R.drawable.sym_keyboard_clear_clipboard_lxx
+            }
+            "sweep" -> R.drawable.ic_clear_all
+            "sweep_slanted" -> R.drawable.ic_clear_all_slanted
+            "clipboard_slash" -> R.drawable.ic_clipboard_slash
+            else -> when (iconStyle) {
+                KeyboardTheme.STYLE_ROUNDED -> R.drawable.ic_bin_rounded
+                else -> R.drawable.ic_bin
+            }
+        }
+        val baseIds = defaultIds.toMutableMap().apply {
+            put(ToolbarKey.CLEAR_CLIPBOARD.name.lowercase(Locale.US), clearClipboardResId)
+            put("clear_handwriting", R.drawable.ic_close)
+        }
         val overrideIds = customIconIds(context, prefs)
-        val ids = if (overrideIds.isEmpty()) defaultIds else defaultIds + overrideIds
+        val ids = if (overrideIds.isEmpty()) baseIds else baseIds + overrideIds
         if (!needsReload && ids == iconIds) return
         iconIds = ids
         iconsByName.clear()
@@ -92,6 +111,7 @@ class KeyboardIconsSet private constructor() {
             "clipboard_normal_key" to ToolbarKey.CLIPBOARD.name.lowercase(Locale.US),
             "cut_key" to ToolbarKey.CUT.name.lowercase(Locale.US),
             "incognito_key" to ToolbarKey.INCOGNITO.name.lowercase(Locale.US),
+            "touchpad_key" to ToolbarKey.TOUCHPAD.name.lowercase(Locale.US),
             "settings_key" to ToolbarKey.SETTINGS.name.lowercase(Locale.US),
             "start_onehanded_mode_key" to ToolbarKey.ONE_HANDED.name.lowercase(Locale.US),
             "floating_key" to ToolbarKey.FLOATING.name.lowercase(Locale.US),
@@ -134,15 +154,19 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.SETTINGS -> R.drawable.sym_keyboard_settings_holo
                     ToolbarKey.SELECT_ALL -> R.drawable.ic_select_all
                     ToolbarKey.SELECT_WORD -> R.drawable.ic_select
+                    ToolbarKey.SELECT_MODE -> R.drawable.ic_select
                     ToolbarKey.COPY -> R.drawable.sym_keyboard_copy
                     ToolbarKey.CUT -> R.drawable.sym_keyboard_cut
                     ToolbarKey.PASTE -> R.drawable.sym_keyboard_paste
                     ToolbarKey.ONE_HANDED -> R.drawable.sym_keyboard_start_onehanded_holo
                     ToolbarKey.FLOATING -> R.drawable.ic_drag_indicator
                     ToolbarKey.INCOGNITO -> R.drawable.ic_incognito_final
+                    ToolbarKey.TOUCHPAD -> R.drawable.ic_touchpad
+                    ToolbarKey.TEXT_EDIT -> R.drawable.ic_text_edit
                     ToolbarKey.AUTOCORRECT -> R.drawable.ic_autocorrect
-                    ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.sym_keyboard_clear_clipboard_holo
+                    ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.ic_bin
                     ToolbarKey.CLOSE_HISTORY -> R.drawable.ic_close
+                    ToolbarKey.HANDWRITING -> R.drawable.ic_edit
                     ToolbarKey.EMOJI -> R.drawable.sym_keyboard_smiley_holo
                     ToolbarKey.LEFT -> R.drawable.ic_dpad_left
                     ToolbarKey.RIGHT -> R.drawable.ic_dpad_right
@@ -209,15 +233,19 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.SETTINGS -> R.drawable.sym_keyboard_settings_lxx
                     ToolbarKey.SELECT_ALL -> R.drawable.ic_select_all
                     ToolbarKey.SELECT_WORD -> R.drawable.ic_select
+                    ToolbarKey.SELECT_MODE -> R.drawable.ic_select
                     ToolbarKey.COPY -> R.drawable.sym_keyboard_copy
                     ToolbarKey.CUT -> R.drawable.sym_keyboard_cut
                     ToolbarKey.PASTE -> R.drawable.sym_keyboard_paste
                     ToolbarKey.ONE_HANDED -> R.drawable.sym_keyboard_start_onehanded_lxx
                     ToolbarKey.FLOATING -> R.drawable.ic_drag_indicator
                     ToolbarKey.INCOGNITO -> R.drawable.ic_incognito_final
+                    ToolbarKey.TOUCHPAD -> R.drawable.ic_touchpad
+                    ToolbarKey.TEXT_EDIT -> R.drawable.ic_text_edit
                     ToolbarKey.AUTOCORRECT -> R.drawable.ic_autocorrect
-                    ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.sym_keyboard_clear_clipboard_lxx
+                    ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.ic_bin
                     ToolbarKey.CLOSE_HISTORY -> R.drawable.ic_close
+                    ToolbarKey.HANDWRITING -> R.drawable.ic_edit
                     ToolbarKey.EMOJI -> R.drawable.sym_keyboard_smiley_lxx
                     ToolbarKey.LEFT -> R.drawable.ic_dpad_left
                     ToolbarKey.RIGHT -> R.drawable.ic_dpad_right
@@ -284,15 +312,19 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.SETTINGS -> R.drawable.sym_keyboard_settings_rounded
                     ToolbarKey.SELECT_ALL -> R.drawable.ic_select_all_rounded
                     ToolbarKey.SELECT_WORD -> R.drawable.ic_select_rounded
+                    ToolbarKey.SELECT_MODE -> R.drawable.ic_select_rounded
                     ToolbarKey.COPY -> R.drawable.sym_keyboard_copy_rounded
                     ToolbarKey.CUT -> R.drawable.sym_keyboard_cut_rounded
                     ToolbarKey.PASTE -> R.drawable.sym_keyboard_paste_rounded
                     ToolbarKey.ONE_HANDED -> R.drawable.sym_keyboard_start_onehanded_rounded
                     ToolbarKey.FLOATING -> R.drawable.ic_drag_indicator
                     ToolbarKey.INCOGNITO -> R.drawable.ic_incognito_final
+                    ToolbarKey.TOUCHPAD -> R.drawable.ic_touchpad_rounded
+                    ToolbarKey.TEXT_EDIT -> R.drawable.ic_text_edit
                     ToolbarKey.AUTOCORRECT -> R.drawable.ic_autocorrect_rounded
-                    ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.sym_keyboard_clear_clipboard_rounded
+                    ToolbarKey.CLEAR_CLIPBOARD -> R.drawable.ic_bin
                     ToolbarKey.CLOSE_HISTORY -> R.drawable.ic_close_rounded
+                    ToolbarKey.HANDWRITING -> R.drawable.ic_edit
                     ToolbarKey.EMOJI -> R.drawable.sym_keyboard_smiley_rounded
                     ToolbarKey.LEFT -> R.drawable.ic_dpad_left_rounded
                     ToolbarKey.RIGHT -> R.drawable.ic_dpad_right_rounded

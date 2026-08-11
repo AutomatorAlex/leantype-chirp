@@ -105,7 +105,7 @@ fun ColorThemePickerDialog(
     val targetScreen = if (isNight) SettingsDestination.ColorsNight else SettingsDestination.Colors
     ThreeButtonAlertDialog(
         onDismissRequest = onDismissRequest,
-        cancelButtonText = stringResource(R.string.dialog_close),
+        cancelButtonText = null,
         onConfirmed = { },
         confirmButtonText = null,
         neutralButtonText = stringResource(R.string.load),
@@ -116,7 +116,7 @@ fun ColorThemePickerDialog(
                 LocalTextStyle provides MaterialTheme.typography.bodyLarge
             ) {
                 LazyColumn(state = state) {
-                    items(colors) { item ->
+                    items(colors, key = { it }) { item ->
                         if (item == "") {
                             AddColorRow(onDismissRequest, userColors, targetScreen, setting.key)
                         } else {

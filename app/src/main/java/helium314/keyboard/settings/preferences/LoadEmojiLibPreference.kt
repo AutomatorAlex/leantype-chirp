@@ -7,10 +7,20 @@ import androidx.annotation.DrawableRes
 import androidx.core.content.edit
 import helium314.keyboard.latin.utils.protectedPrefs
 import helium314.keyboard.latin.utils.getActivity
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,6 +56,7 @@ fun LoadEmojiLibPreference(
     title: String,
     summary: String? = null,
     @DrawableRes icon: Int? = null,
+    onSuccess: (() -> Unit)? = null,
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var isDownloading by rememberSaveable { mutableStateOf(false) }
@@ -61,10 +72,8 @@ fun LoadEmojiLibPreference(
 
     fun refreshAndLoad() {
         helium314.keyboard.keyboard.emoji.EmojiPalettesView.closeDictionaryFacilitator()
-        // Force settings screen to recompose by updating a dummy pref or just updating local state so the preference knows it's installed.
-        // The most direct way since we read `isInstalled` at composition is to just swap a boolean state here if needed,
-        // but `isInstalled` is computed on every recompose.
         ctx.protectedPrefs().edit { putLong("emoji_lib_last_update", System.currentTimeMillis()) }
+        onSuccess?.invoke()
         (ctx.getActivity() as? helium314.keyboard.settings.SettingsActivity)?.let {
             it.prefChanged.value = it.prefChanged.value + 1
         }
@@ -77,6 +86,10 @@ fun LoadEmojiLibPreference(
                 val urlStr = "${Links.DICTIONARY_URL}${Links.DICTIONARY_DOWNLOAD_SUFFIX}${Links.DICTIONARY_EMOJI_CLDR_SUFFIX}$dictName"
                 val url = URL(urlStr)
                 val conn = url.openConnection() as HttpURLConnection
+                conn.setRequestProperty("User-Agent", "HeliboardL/3.8.9 (Android)")
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.instanceFollowRedirects = true
                 conn.connect()
 
                 if (conn.responseCode != HttpURLConnection.HTTP_OK) {
@@ -90,9 +103,14 @@ fun LoadEmojiLibPreference(
                             input.copyTo(output)
                         }
                     }
+                    ctx.protectedPrefs().edit {
+                        putString("pref_dict_download_link_emoji_${locale}", urlStr)
+                        putString("pref_dict_download_link_emoji_${locale.toLanguageTag()}", urlStr)
+                    }
                     withContext(Dispatchers.Main) {
                         FeedbackManager.message(ctx, R.string.load_gesture_library_download_success) // Reusing success string
                         isDownloading = false
+                        showDialog = false
                         refreshAndLoad()
                     }
                 } else {
@@ -107,6 +125,7 @@ fun LoadEmojiLibPreference(
         }
     }
 
+
     val launcher = filePicker { uri ->
         if (cachePath != null) {
             val targetFile = File(cachePath, dictName)
@@ -120,6 +139,7 @@ fun LoadEmojiLibPreference(
                 }
                 tmpFile.delete()
                 FeedbackManager.message(ctx, "Emoji dictionary loaded successfully")
+                showDialog = false
                 refreshAndLoad()
             } catch (e: IOException) {
                 Toast.makeText(ctx, "Failed to load emoji dictionary from file", Toast.LENGTH_SHORT).show()
@@ -135,41 +155,72 @@ fun LoadEmojiLibPreference(
     )
 
     if (showDialog) {
-        ConfirmationDialog(
+        helium314.keyboard.settings.dialogs.PreferenceDialog(
             onDismissRequest = { if (!isDownloading) showDialog = false },
-            onConfirmed = {
-                if (!isDownloading) {
-                    startDownload()
-                }
-            },
-            confirmButtonText = if (isDownloading) "Downloading..." else "Download",
-            title = { Text(title) },
-            content = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Download or load an emoji dictionary file for the current language ($lang) to enable emoji suggestions.")
-                    if (isDownloading) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        CircularProgressIndicator()
+            title = title,
+            showCloseButton = !isDownloading,
+            buttons = {
+                if (isDownloading) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Downloading...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { startDownload() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Download")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                showDialog = false
+                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                                    .addCategory(Intent.CATEGORY_OPENABLE)
+                                    .setType("application/octet-stream")
+                                launcher.launch(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Load from file")
+                        }
+                        if (isInstalled) {
+                            Button(
+                                onClick = {
+                                    libFile.delete()
+                                    showDialog = false
+                                    refreshAndLoad()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Delete")
+                            }
+                        }
                     }
                 }
-            },
-            neutralButtonText = when {
-                isDownloading -> null
-                isInstalled -> "Delete"
-                else -> "Load from file"
-            },
-            onNeutral = {
-                if (isInstalled) {
-                    libFile.delete()
-                    refreshAndLoad()
-                } else {
-                    showDialog = false
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-                        .addCategory(Intent.CATEGORY_OPENABLE)
-                        .setType("application/octet-stream")
-                    launcher.launch(intent)
-                }
             }
-        )
+        ) {
+            Text("Download or load an emoji dictionary file for the current language ($lang) to enable emoji suggestions.")
+        }
     }
 }

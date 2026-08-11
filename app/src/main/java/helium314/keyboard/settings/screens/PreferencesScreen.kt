@@ -21,6 +21,8 @@ import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.getActivity
 import helium314.keyboard.latin.utils.locale
 import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.RichInputMethodManager
+import helium314.keyboard.latin.utils.SubtypeLocaleUtils.displayName
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.settings.Setting
 import helium314.keyboard.settings.preferences.ReorderSwitchPreference
@@ -55,6 +57,8 @@ fun PreferencesScreen(
             Settings.PREF_VIBRATE_ON else null,
         if (prefs.getBoolean(Settings.PREF_VIBRATE_ON, Defaults.PREF_VIBRATE_ON))
             Settings.PREF_VIBRATION_DURATION_SETTINGS else null,
+        if (prefs.getBoolean(Settings.PREF_VIBRATE_ON, Defaults.PREF_VIBRATE_ON) && AudioAndHapticFeedbackManager.getInstance().hasAmplitudeControl())
+            Settings.PREF_VIBRATION_AMPLITUDE_SETTINGS else null,
         if (prefs.getBoolean(Settings.PREF_VIBRATE_ON, Defaults.PREF_VIBRATE_ON))
             Settings.PREF_VIBRATE_IN_DND_MODE else null,
         Settings.PREF_SOUND_ON,
@@ -71,14 +75,20 @@ fun PreferencesScreen(
             Settings.PREF_SHOW_NUMBER_ROW_HINTS else null,
         if (!prefs.getBoolean(Settings.PREF_SHOW_NUMBER_ROW, Defaults.PREF_SHOW_NUMBER_ROW))
             Settings.PREF_SHOW_NUMBER_ROW_IN_SYMBOLS else null,
+        if (!prefs.getBoolean(Settings.PREF_SHOW_NUMBER_ROW, Defaults.PREF_SHOW_NUMBER_ROW)
+            && prefs.getBoolean(Settings.PREF_SHOW_NUMBER_ROW_IN_SYMBOLS, Defaults.PREF_SHOW_NUMBER_ROW_IN_SYMBOLS))
+            Settings.PREF_COMPACT_NUMBER_ROW_IN_SYMBOLS else null,
         Settings.PREF_SHOW_LANGUAGE_SWITCH_KEY,
         Settings.PREF_LANGUAGE_SWITCH_KEY,
+        Settings.PREF_DIRECT_IME_SWITCH_TARGET,
         Settings.PREF_SHOW_EMOJI_KEY,
         Settings.PREF_REMOVE_REDUNDANT_POPUPS,
         R.string.settings_category_clipboard_history,
         Settings.PREF_ENABLE_CLIPBOARD_HISTORY,
         if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME else null,
-        if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST else null
+        if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST else null,
+        if (clipboardHistoryEnabled) Settings.PREF_CLIPBOARD_FOLD_PINNED else null,
+        if (clipboardHistoryEnabled) Settings.PREF_CLEAR_CLIPBOARD_ICON else null
     )
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -130,6 +140,9 @@ fun createPreferencesSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_SHOW_NUMBER_ROW_IN_SYMBOLS, R.string.number_row_in_symbols) {
         SwitchPreference(it, Defaults.PREF_SHOW_NUMBER_ROW_IN_SYMBOLS) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     },
+    Setting(context, Settings.PREF_COMPACT_NUMBER_ROW_IN_SYMBOLS, R.string.compact_number_row_in_symbols, R.string.compact_number_row_in_symbols_summary) {
+        SwitchPreference(it, Defaults.PREF_COMPACT_NUMBER_ROW_IN_SYMBOLS) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    },
     Setting(context, Settings.PREF_LOCALIZED_NUMBER_ROW, R.string.localized_number_row, R.string.localized_number_row_summary) {
         SwitchPreference(it, Defaults.PREF_LOCALIZED_NUMBER_ROW) {
             KeyboardLayoutSet.onSystemLocaleChanged()
@@ -152,6 +165,13 @@ fun createPreferencesSettings(context: Context) = listOf(
             ),
             Defaults.PREF_LANGUAGE_SWITCH_KEY
         ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
+    },
+    Setting(context, Settings.PREF_DIRECT_IME_SWITCH_TARGET, R.string.direct_ime_switch_title, R.string.direct_ime_switch_summary) {
+        ListPreference(
+            it,
+            getDirectImeSwitchItems(context),
+            Defaults.PREF_DIRECT_IME_SWITCH_TARGET
+        )
     },
     Setting(context, Settings.PREF_SHOW_EMOJI_KEY, R.string.show_emoji_key) {
         SwitchPreference(it, Defaults.PREF_SHOW_EMOJI_KEY) { KeyboardSwitcher.getInstance().reloadKeyboard() }
@@ -183,6 +203,28 @@ fun createPreferencesSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST, R.string.clipboard_history_pinned_first) {
         SwitchPreference(it, Defaults.PREF_CLIPBOARD_HISTORY_PINNED_FIRST)
     },
+    Setting(context, Settings.PREF_CLIPBOARD_FOLD_PINNED, R.string.clipboard_fold_pinned) {
+        SwitchPreference(it, Defaults.PREF_CLIPBOARD_FOLD_PINNED)
+    },
+    Setting(context, Settings.PREF_CLEAR_CLIPBOARD_ICON, R.string.clear_clipboard_icon) { setting ->
+        val ctx = LocalContext.current
+        val items = listOf(
+            stringResource(R.string.clear_clipboard_icon_bin) to "bin",
+            stringResource(R.string.clear_clipboard_icon_sweep) to "sweep",
+            stringResource(R.string.clear_clipboard_icon_sweep_slanted) to "sweep_slanted",
+            stringResource(R.string.clear_clipboard_icon_clipboard_slash) to "clipboard_slash",
+            stringResource(R.string.clear_clipboard_icon_legacy) to "legacy"
+        )
+        ListPreference(
+            setting = setting,
+            items = items,
+            default = Defaults.PREF_CLEAR_CLIPBOARD_ICON
+        ) {
+            helium314.keyboard.keyboard.internal.KeyboardIconsSet.needsReload = true
+            helium314.keyboard.keyboard.internal.KeyboardIconsSet.instance.loadIcons(ctx)
+            KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        }
+    },
     Setting(context, Settings.PREF_VIBRATION_DURATION_SETTINGS, R.string.prefs_keypress_vibration_duration_settings) { setting ->
         SliderPreference(
             name = setting.title,
@@ -194,6 +236,23 @@ fun createPreferencesSettings(context: Context) = listOf(
             },
             range = -1f..100f,
             onValueChanged = { it?.let { AudioAndHapticFeedbackManager.getInstance().vibrate(it.toLong()) } }
+        )
+    },
+    Setting(context, Settings.PREF_VIBRATION_AMPLITUDE_SETTINGS, R.string.prefs_keypress_vibration_amplitude_settings) { setting ->
+        SliderPreference(
+            name = setting.title,
+            key = setting.key,
+            default = Defaults.PREF_VIBRATION_AMPLITUDE_SETTINGS,
+            description = {
+                if (it < 0) stringResource(R.string.settings_system_default)
+                else "${it.toInt()}%"
+            },
+            range = -1f..100f,
+            onValueChanged = { it?.let {
+                val duration = context.prefs().getInt(Settings.PREF_VIBRATION_DURATION_SETTINGS, Defaults.PREF_VIBRATION_DURATION_SETTINGS)
+                val safeDuration = if (duration >= 0) duration else 15
+                AudioAndHapticFeedbackManager.getInstance().vibrate(safeDuration.toLong(), it.toInt())
+            } }
         )
     },
     Setting(context, Settings.PREF_KEYPRESS_SOUND_VOLUME, R.string.prefs_keypress_sound_volume_settings) { setting ->
@@ -224,4 +283,40 @@ private fun Preview() {
             PreferencesScreen { }
         }
     }
+}
+
+private fun getDirectImeSwitchItems(context: Context): List<Pair<String, String>> {
+    val pm = context.packageManager
+    val richImm = RichInputMethodManager.getInstance()
+    val thisImi = richImm.inputMethodInfoOfThisIme
+    val enabledImis = richImm.inputMethodManager.enabledInputMethodList
+        .sortedBy { it.hashCode() }.sortedBy { it.loadLabel(pm).toString() }
+    
+    val items = mutableListOf<Pair<String, String>>()
+    items.add(context.getString(R.string.direct_ime_switch_none) to "")
+
+    enabledImis.forEach { imi ->
+        val subtypes = if (imi != thisImi) richImm.getEnabledInputMethodSubtypes(imi, true)
+            else richImm.getEnabledInputMethodSubtypes(imi, true).sortedBy { it.displayName() }
+        if (subtypes.isEmpty()) {
+            val label = imi.loadLabel(pm).toString()
+            val value = "${imi.id};"
+            items.add(label to value)
+        } else {
+            subtypes.forEach { subtype ->
+                if (!subtype.isAuxiliary) {
+                    val subtypeName = if (imi == thisImi) {
+                        subtype.displayName()
+                    } else {
+                        subtype.getDisplayName(context, imi.packageName, imi.serviceInfo.applicationInfo)
+                    }
+                    val label = if (subtypeName.isBlank()) imi.loadLabel(pm).toString() 
+                        else "$subtypeName (${imi.loadLabel(pm)})"
+                    val value = "${imi.id};${subtype.hashCode()}"
+                    items.add(label to value)
+                }
+            }
+        }
+    }
+    return items
 }

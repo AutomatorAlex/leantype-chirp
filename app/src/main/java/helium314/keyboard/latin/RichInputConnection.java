@@ -173,6 +173,7 @@ public final class RichInputConnection implements PrivateCommandPerformer {
 
     public void onStartInput() {
         mLastSlowInputConnectionTime = -SLOW_INPUTCONNECTION_PERSIST_MS;
+        mNestLevel = 0;
     }
 
     private void checkConsistencyForDebug() {
@@ -214,11 +215,8 @@ public final class RichInputConnection implements PrivateCommandPerformer {
             if (isConnected()) {
                 mIC.beginBatchEdit();
             }
-        } else {
-            if (DBG) {
-                throw new RuntimeException("Nest level too deep");
-            }
-            Log.e(TAG, "Nest level too deep : " + mNestLevel);
+        } else if (mNestLevel > 10) {
+            Log.w(TAG, "Nest level unusually high : " + mNestLevel);
         }
         if (DEBUG_BATCH_NESTING)
             checkBatchEdit();
@@ -234,6 +232,13 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         }
         if (DEBUG_PREVIOUS_TEXT)
             checkConsistencyForDebug();
+    }
+
+    public void ensureBatchEditClosed() {
+        if (mNestLevel > 0 && isConnected()) {
+            mIC.endBatchEdit();
+        }
+        mNestLevel = 0;
     }
 
     /**
@@ -301,6 +306,9 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         // always empty, but looks like things still work normally
         mComposingText.setLength(0);
         mIC = mParent.getCurrentInputConnection();
+        if (!isConnected()) {
+            return false;
+        }
         // Call upon the inputconnection directly since our own method is using the
         // cache, and
         // we want to refresh it.
@@ -314,7 +322,7 @@ public final class RichInputConnection implements PrivateCommandPerformer {
             // framework bug... Fall back to ground state and return false.
             mExpectedSelStart = INVALID_CURSOR_POSITION;
             mExpectedSelEnd = INVALID_CURSOR_POSITION;
-            Log.e(TAG, "Unable to connect to the editor to retrieve text.");
+            Log.w(TAG, "Unable to connect to the editor to retrieve text.");
             return false;
         }
         mCommittedTextBeforeComposingText.append(textBeforeCursor);
@@ -699,11 +707,44 @@ public final class RichInputConnection implements PrivateCommandPerformer {
             checkConsistencyForDebug();
     }
 
+    public void deleteSurroundingText(final int beforeLength, final int afterLength) {
+        if (DEBUG_BATCH_NESTING)
+            checkBatchEdit();
+        if (DebugFlags.DEBUG_ENABLED)
+            Log.d(TAG, "deleting " + beforeLength + " before and " + afterLength + " after cursor");
+        final int remainingChars = mComposingText.length() - beforeLength;
+        if (remainingChars >= 0) {
+            mComposingText.setLength(remainingChars);
+        } else {
+            mComposingText.setLength(0);
+            final int len = Math.max(mCommittedTextBeforeComposingText.length() + remainingChars, 0);
+            mCommittedTextBeforeComposingText.setLength(len);
+        }
+        if (mExpectedSelStart > beforeLength) {
+            mExpectedSelStart -= beforeLength;
+            mExpectedSelEnd -= beforeLength;
+        } else {
+            mExpectedSelEnd -= mExpectedSelStart;
+            mExpectedSelStart = 0;
+        }
+        if (isConnected()) {
+            mIC.deleteSurroundingText(beforeLength, afterLength);
+        }
+        if (DEBUG_PREVIOUS_TEXT)
+            checkConsistencyForDebug();
+    }
+
     public void performEditorAction(final int actionId) {
         mIC = mParent.getCurrentInputConnection();
-        if (isConnected()) {
-            mIC.performEditorAction(actionId);
+        if (!isConnected()) {
+            return;
         }
+
+        if (mComposingText.length() > 0) {
+            finishComposingText();
+        }
+
+        mIC.performEditorAction(actionId);
     }
 
     public void sendKeyEvent(final KeyEvent keyEvent) {
@@ -851,21 +892,6 @@ public final class RichInputConnection implements PrivateCommandPerformer {
             if (DebugFlags.DEBUG_ENABLED)
                 Log.d(TAG, "setting composing text of length " + text.length()); // don't log actual text
             mIC.setComposingText(text, newCursorPosition);
-            if (!Settings.getValues().mInputAttributes.mShouldShowSuggestions && text.length() > 0) {
-                // We have a field that disables suggestions, but still committed text is set.
-                // This might lead to weird bugs (e.g.
-                // https://github.com/Helium314/HeliBoard/issues/225), so better do
-                // a sanity check whether the wanted text has been set.
-                // Note that the check may also fail because the text field is not yet updated,
-                // so we don't want to check everything!
-                final CharSequence lastChar = mIC.getTextBeforeCursor(1, 0);
-                if (lastChar == null || lastChar.length() == 0
-                        || text.charAt(text.length() - 1) != lastChar.charAt(0)) {
-                    Log.w(TAG, "did set " + text + ", but got " + mIC.getTextBeforeCursor(text.length(), 0)
-                            + " as last character");
-                    return false;
-                }
-            }
         }
         if (DEBUG_PREVIOUS_TEXT)
             checkConsistencyForDebug();
@@ -912,6 +938,14 @@ public final class RichInputConnection implements PrivateCommandPerformer {
         return reloadTextCache();
     }
 
+    public boolean performContextMenuAction(final int actionId) {
+        mIC = mParent.getCurrentInputConnection();
+        if (isConnected()) {
+            return mIC.performContextMenuAction(actionId);
+        }
+        return false;
+    }
+
     public void selectAll() {
         if (!isConnected())
             return;
@@ -938,6 +972,11 @@ public final class RichInputConnection implements PrivateCommandPerformer {
     }
 
     public void copyText(final boolean getSelection) {
+        if (getSelection && hasSelection()) {
+            if (performContextMenuAction(android.R.id.copy)) {
+                return;
+            }
+        }
         CharSequence text = null;
         if (getSelection) {
             // copy selected text, and if nothing is selected copy the whole text

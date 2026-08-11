@@ -16,7 +16,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.leantypechirp.keyboard"
@@ -38,10 +38,16 @@ android {
     productFlavors {
         create("standard") {
             dimension = "privacy"
+            minSdk = 23
+        }
+        create("standardfull") {
+            dimension = "privacy"
+            minSdk = 23
         }
         create("offline") {
             dimension = "privacy"
             applicationIdSuffix = ".offline"
+            minSdk = 26
         }
         create("offlinelite") {
             dimension = "privacy"
@@ -56,6 +62,9 @@ android {
                 keyPassword = keystoreProperties["keyPassword"] as String
                 storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -97,6 +106,7 @@ android {
             val flavor = productFlavors.firstOrNull()?.name ?: ""
             val number = when(flavor) {
                 "standard" -> "1"
+                "standardfull" -> "1"
                 "offline" -> "2"
                 "offlinelite" -> "3"
                 else -> ""
@@ -107,15 +117,31 @@ android {
                     output?.outputFileName = "$number-LeanType-Chirp_${defaultConfig.versionName}-${flavor}-${buildType.name}.apk"
                 }
             }
+
         }
         // got a little too big for GitHub after some dependency upgrades, so we remove the largest dictionary
         androidComponents.onVariants { variant: ApplicationVariant ->
+            val patterns = mutableListOf<String>()
             if (variant.buildType == "debug") {
-                variant.androidResources.ignoreAssetsPatterns = listOf("main_ro.dict")
+                patterns.add("main_ro.dict")
                 variant.proguardFiles = emptyList()
                 //noinspection ProguardAndroidTxtUsage we intentionally use the "normal" file here
                 variant.proguardFiles.add(project.layout.buildDirectory.file(getDefaultProguardFile("proguard-android.txt").absolutePath))
                 variant.proguardFiles.add(project.layout.buildDirectory.file(project.buildFile.parent + "/proguard-rules.pro"))
+            }
+            if (variant.flavorName == "standard" || variant.flavorName == "standardfull") {
+                // Ignore all dictionary assets in standard/standardfull flavors
+                val dictsDir = project.file("src/main/assets/dicts")
+                if (dictsDir.exists() && dictsDir.isDirectory) {
+                    dictsDir.listFiles()?.forEach { file ->
+                        if (file.name.endsWith(".dict")) {
+                            patterns.add(file.name)
+                        }
+                    }
+                }
+            }
+            if (patterns.isNotEmpty()) {
+                variant.androidResources.ignoreAssetsPatterns = patterns
             }
         }
     }
@@ -131,12 +157,27 @@ android {
             path = File("src/main/jni/Android.mk")
         }
     }
-//    ndkVersion = "28.0.13004108"
+    ndkVersion = "28.0.13004108"
 
     packaging {
         jniLibs {
             // false is required for Android 16+ 16-KB page alignment compatibility on prebuilts.
             useLegacyPackaging = false
+        }
+        resources {
+            excludes += "assets/dexopt/baseline.prof"
+            excludes += "assets/dexopt/baseline.profm"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/license.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/notice.txt"
+            excludes += "META-INF/ASL2.0"
+            excludes += "META-INF/*.kotlin_module"
+            excludes += "META-INF/kotlin-project-structure-metadata.json"
+            excludes += "**/*.proto"
         }
     }
 
@@ -170,6 +211,12 @@ android {
         // these orphaned strings are harmlessly stripped by R8 during minification.
         disable += "ExtraTranslation"
     }
+
+    sourceSets {
+        getByName("standardfull") {
+            java.srcDirs("src/standard/java")
+        }
+    }
 }
 
 dependencies {
@@ -179,6 +226,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.autofill:autofill:1.3.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
+    implementation("androidx.emoji2:emoji2:1.4.0")
 
     // kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
@@ -202,10 +250,24 @@ dependencies {
     // gemini ai proofreading
     "standardImplementation"("com.google.ai.client.generativeai:generativeai:0.9.0")
     "standardImplementation"("androidx.security:security-crypto:1.1.0-alpha06") // for encrypted API key storage
+    "standardfullImplementation"("com.google.ai.client.generativeai:generativeai:0.9.0")
+    "standardfullImplementation"("androidx.security:security-crypto:1.1.0-alpha06")
 
     // local llm proofreading (offline)
-    // ONNX Runtime for T5 encoder-decoder grammar models
-    "offlineImplementation"("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
+    "offlineImplementation"("io.github.ljcamargo:llamacpp-kotlin:0.4.0")
+
+    // Force 16 KB page-aligned version of graphics-path
+    implementation("androidx.graphics:graphics-path:1.1.0")
+
+    // WorkManager — required by ML Kit Digital Ink plugin (loaded via DexClassLoader).
+    // ML Kit internally calls WorkManager.getInstance(context) using the host app context,
+    // so the host app must have WorkManagerInitializer registered in its manifest.
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+
+    // ML Kit Digital Ink Recognition — required by the handwriting plugin.
+    // ML Kit's internal asset manager and native library loader use the host app context,
+    // so the host app must compile and include the client library resources/libraries.
+    "standardfullImplementation"("com.google.mlkit:digital-ink-recognition:19.0.0")
 
     // test
     testImplementation(kotlin("test"))
@@ -219,4 +281,11 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.1.5")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Disable baseline/ART profile tasks to guarantee deterministic reproducible builds
+tasks.configureEach {
+    if (name.contains("ArtProfile", ignoreCase = true)) {
+        enabled = false
+    }
 }

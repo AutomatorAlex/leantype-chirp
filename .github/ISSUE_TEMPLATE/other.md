@@ -1,6 +1,6 @@
 ---
 name: Other
-about: Anything that does not fit into the other categories. Please don't use this for questions, discussions, or anything that fits into one of the other issue categories.
+about: Anything that does not fit into the other categories
 ---
 
 Please see this fork's README and CONTRIBUTING guide before opening an issue.

@@ -7,33 +7,169 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.core.content.edit
+import android.view.View
+import android.view.MotionEvent
+import android.os.Handler
+import android.os.Looper
+import android.annotation.SuppressLint
 import androidx.core.view.forEach
 import helium314.keyboard.keyboard.internal.KeyboardIconsSet
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.common.Constants.Separators
+import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ToolbarKey.*
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.EnumMap
 import java.util.Locale
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.PixelFormat
+import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.content.res.ColorStateList
+
+// Process-wide scope used for fire-and-forget tasks triggered by
+// SharedPreferences listeners (which don't carry a coroutine scope).
+// SupervisorJob prevents a single failure from cancelling unrelated
+// preference-driven updates, and the exception handler keeps crashes
+// from surfacing as silent uncaught exceptions in the default
+// handler. UI mutations still hop to Dispatchers.Main explicitly.
+private val toolbarPrefScope = CoroutineScope(SupervisorJob() + Dispatchers.Default +
+    CoroutineExceptionHandler { _, throwable ->
+        android.util.Log.w("ToolbarUtils", "preference update failed", throwable)
+    })
 
 fun createToolbarKey(context: Context, key: ToolbarKey): ImageButton {
     val button = ImageButton(context, null, R.attr.suggestionWordStyle)
     button.scaleType = ImageView.ScaleType.CENTER_INSIDE
-    val padding = 6.dpToPx(context.resources)
+    val padding = 9.dpToPx(context.resources)
     button.setPadding(padding, padding, padding, padding)
     button.tag = key
     button.contentDescription = key.name.lowercase().getStringResourceOrName("", context)
+    button.setBackgroundResource(R.drawable.toolbar_key_background)
+    
+    val index = if (key.name.startsWith("CUSTOM_AI_")) {
+        key.name.removePrefix("CUSTOM_AI_").toIntOrNull()
+    } else null
+    
+    val showTags = context.prefs().getBoolean("pref_custom_ai_show_tags_on_toolbar", false)
+    val tag = if (index != null) {
+        context.prefs().getString("pref_custom_ai_tag_$index", "") ?: ""
+    } else ""
+    
+    val rawDrawable = if (showTags && tag.isNotBlank()) {
+        TagDrawable(tag.take(3).uppercase(Locale.US))
+    } else {
+        KeyboardIconsSet.instance.getNewDrawable(key.name, context)
+    }
+
+    val showLongPressHint = context.prefs()
+        .getBoolean(Settings.PREF_TOOLBAR_LONG_PRESS_HINT, Defaults.PREF_TOOLBAR_LONG_PRESS_HINT)
+    val finalDrawable = if (rawDrawable != null && showLongPressHint
+        && getCodeForToolbarKeyLongClick(key) != KeyCode.UNSPECIFIED
+    ) {
+        LongPressHintDrawable(rawDrawable)
+    } else {
+        rawDrawable
+    }
+    button.setImageDrawable(finalDrawable)
     setToolbarButtonActivatedState(button)
-    button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(key.name, context))
     return button
+}
+
+class TagDrawable(private val text: String) : Drawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+
+    private var tintList: ColorStateList? = null
+    private var tintMode: PorterDuff.Mode = PorterDuff.Mode.MULTIPLY
+    private var tintFilter: ColorFilter? = null
+    private var internalColorFilter: ColorFilter? = null
+
+    override fun setTintList(tint: ColorStateList?) {
+        tintList = tint
+        updateTintFilter()
+        invalidateSelf()
+    }
+
+    override fun setTintMode(tintMode: PorterDuff.Mode?) {
+        this.tintMode = tintMode ?: PorterDuff.Mode.MULTIPLY
+        updateTintFilter()
+        invalidateSelf()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        internalColorFilter = colorFilter
+        updateTintFilter()
+        invalidateSelf()
+    }
+
+    override fun onStateChange(state: IntArray): Boolean {
+        if (tintList != null) {
+            updateTintFilter()
+            invalidateSelf()
+            return true
+        }
+        return super.onStateChange(state)
+    }
+
+    override fun isStateful(): Boolean {
+        return tintList?.isStateful == true || super.isStateful()
+    }
+
+    private fun updateTintFilter() {
+        val colors = tintList
+        if (colors != null) {
+            val color = colors.getColorForState(state, Color.WHITE)
+            tintFilter = PorterDuffColorFilter(color, tintMode)
+        } else {
+            tintFilter = null
+        }
+    }
+
+    override fun draw(canvas: Canvas) {
+        val bounds = bounds
+        val cx = bounds.exactCenterX()
+        val cy = bounds.exactCenterY()
+
+        // Apply theme's active color/tint filter dynamically to text paint
+        val activeFilter = tintFilter ?: internalColorFilter
+        paint.colorFilter = activeFilter
+
+        // Scaled text size based on height
+        paint.textSize = bounds.height() * 0.37f
+        
+        // Draw centered text
+        val textHeight = paint.descent() - paint.ascent()
+        val textOffset = textHeight / 2 - paint.descent()
+        canvas.drawText(text, cx, cy + textOffset, paint)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        paint.alpha = alpha
+    }
+
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }
 
 fun setToolbarButtonsActivatedStateOnPrefChange(buttonsGroup: ViewGroup, key: String?) {
@@ -43,7 +179,12 @@ fun setToolbarButtonsActivatedStateOnPrefChange(buttonsGroup: ViewGroup, key: St
         && key?.startsWith(Settings.PREF_ONE_HANDED_MODE_PREFIX) == false)
         return
 
-    GlobalScope.launch {
+    // Use a process-wide scope with a SupervisorJob and exception handler.
+    // The previous code used GlobalScope, which is uncancellable and
+    // doesn't have a structured way to handle errors. The buttonsGroup
+    // can be detached if the IME is torn down quickly, so we also need
+    // to use the main thread.
+    toolbarPrefScope.launch {
         delay(10) // need to wait until SettingsValues are reloaded
         withContext(Dispatchers.Main) {
             buttonsGroup.forEach { if (it is ImageButton) setToolbarButtonActivatedState(it) }
@@ -51,13 +192,27 @@ fun setToolbarButtonsActivatedStateOnPrefChange(buttonsGroup: ViewGroup, key: St
     }
 }
 
-private fun setToolbarButtonActivatedState(button: ImageButton) {
-    button.isActivated = when (button.tag) {
+fun setToolbarButtonActivatedState(button: ImageButton) {
+    val activated = when (button.tag) {
         INCOGNITO -> button.context.prefs().getBoolean(Settings.PREF_ALWAYS_INCOGNITO_MODE, Defaults.PREF_ALWAYS_INCOGNITO_MODE)
         ONE_HANDED -> Settings.getValues().mOneHandedModeEnabled
         SPLIT -> Settings.getValues().mIsSplitKeyboardEnabled
         AUTOCORRECT -> Settings.getValues().mAutoCorrectionEnabledPerUserSettings
+        SELECT_MODE -> helium314.keyboard.keyboard.KeyboardActionListenerImpl.sPersistentSelectionModeActive
         else -> true
+    }
+    button.isActivated = activated
+    val colors = Settings.getValues().mColors
+    if (activated && button.tag in listOf(INCOGNITO, ONE_HANDED, SPLIT, AUTOCORRECT, SELECT_MODE)) {
+        colors.setColor(button.background, ColorType.TOOL_BAR_KEY_ENABLED_BACKGROUND)
+        if (button.drawable != null) {
+            colors.setColor(button, ColorType.ACTION_KEY_ICON)
+        }
+    } else {
+        colors.setColor(button.background, ColorType.TOOL_BAR_EXPAND_KEY_BACKGROUND)
+        if (button.drawable != null) {
+            colors.setColor(button, ColorType.TOOL_BAR_KEY)
+        }
     }
 }
 
@@ -66,6 +221,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     CLIPBOARD -> KeyCode.CLIPBOARD
     CLIPBOARD_SEARCH -> KeyCode.CLIPBOARD_SEARCH
     NUMPAD -> KeyCode.NUMPAD
+    HANDWRITING -> KeyCode.HANDWRITING
     UNDO -> KeyCode.UNDO
     REDO -> KeyCode.REDO
     SETTINGS -> KeyCode.SETTINGS
@@ -77,6 +233,8 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     ONE_HANDED -> KeyCode.TOGGLE_ONE_HANDED_MODE
     FLOATING -> KeyCode.TOGGLE_FLOATING_KEYBOARD
     INCOGNITO -> KeyCode.TOGGLE_INCOGNITO_MODE
+    TOUCHPAD -> KeyCode.TOGGLE_TOUCHPAD_MODE
+    TEXT_EDIT -> KeyCode.TOGGLE_TEXT_EDIT_MODE
     AUTOCORRECT -> KeyCode.TOGGLE_AUTOCORRECT
     CLEAR_CLIPBOARD -> KeyCode.CLIPBOARD_CLEAR_HISTORY
     CLOSE_HISTORY -> KeyCode.ALPHA
@@ -96,6 +254,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     SPLIT -> KeyCode.SPLIT_LAYOUT
     PROOFREAD -> KeyCode.PROOFREAD
     TRANSLATE -> KeyCode.TRANSLATE
+    SELECT_MODE -> KeyCode.TOGGLE_SELECTION_MODE
     CUSTOM_AI_1 -> KeyCode.CUSTOM_AI_1
     CUSTOM_AI_2 -> KeyCode.CUSTOM_AI_2
     CUSTOM_AI_3 -> KeyCode.CUSTOM_AI_3
@@ -130,9 +289,9 @@ fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getC
 
 // names need to be aligned with resources strings (using lowercase of key.name)
 enum class ToolbarKey {
-    VOICE, CLIPBOARD, CLIPBOARD_SEARCH, NUMPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, SPLIT, FLOATING,
-    INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
-    PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, PROOFREAD, TRANSLATE,
+    VOICE, CLIPBOARD, CLIPBOARD_SEARCH, NUMPAD, HANDWRITING, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, SPLIT, FLOATING,
+    INCOGNITO, TOUCHPAD, TEXT_EDIT, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
+    PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, PROOFREAD, TRANSLATE, SELECT_MODE,
     CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, CUSTOM_AI_4, CUSTOM_AI_5,
     CUSTOM_AI_6, CUSTOM_AI_7, CUSTOM_AI_8, CUSTOM_AI_9, CUSTOM_AI_10
 }
@@ -143,22 +302,31 @@ enum class ToolbarMode {
 
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
-private val excludedKeys by lazy {
-    val customAiKeys = if (BuildConfig.FLAVOR != "standard")
+// ponytail: Split excluded keys into flavor-specific exclusions and main-toolbar-only exclusions to allow clipboard toolbar to render clipboard search and close history.
+private val flavorExcludedKeys by lazy {
+    val customAiKeys = if (BuildConfig.FLAVOR != "standard" && BuildConfig.FLAVOR != "standardfull" && BuildConfig.FLAVOR != "offline")
         ToolbarKey.entries.filter { it.name.startsWith("CUSTOM_AI_") }
     else emptyList()
     val otherKeys = if (BuildConfig.FLAVOR == "offlinelite")
-        listOf(CLOSE_HISTORY, PROOFREAD, TRANSLATE, CLIPBOARD_SEARCH)
+        listOf(PROOFREAD, TRANSLATE, CLIPBOARD_SEARCH, HANDWRITING)
+    else if (BuildConfig.FLAVOR == "offline" || BuildConfig.FLAVOR == "standard")
+        listOf(HANDWRITING)
     else
-        listOf(CLOSE_HISTORY, CLIPBOARD_SEARCH)
+        emptyList()
     customAiKeys + otherKeys
+}
+
+private val mainToolbarExcludedKeys = listOf(CLOSE_HISTORY, CLIPBOARD_SEARCH)
+
+private val excludedKeys by lazy {
+    flavorExcludedKeys + mainToolbarExcludedKeys
 }
 
 val defaultToolbarPref by lazy {
     val default = when (helium314.keyboard.latin.BuildConfig.FLAVOR) {
-        "offline" -> listOf(SETTINGS, VOICE, CLIPBOARD, UNDO, INCOGNITO, COPY, PASTE, PROOFREAD, TRANSLATE)
+        "offline" -> listOf(SETTINGS, VOICE, CLIPBOARD, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, INCOGNITO, COPY, PASTE, PROOFREAD, TRANSLATE, TEXT_EDIT)
         "offlinelite" -> listOf(SETTINGS, VOICE, CLIPBOARD, UNDO, INCOGNITO, COPY, PASTE)
-        else -> listOf(SETTINGS, VOICE, CLIPBOARD, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, PROOFREAD, TRANSLATE, INCOGNITO, FLOATING, NUMPAD, COPY, PASTE, SELECT_ALL)
+        else -> listOf(SETTINGS, VOICE, CLIPBOARD, HANDWRITING, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, PROOFREAD, TRANSLATE, INCOGNITO, TOUCHPAD, TEXT_EDIT, FLOATING, NUMPAD, COPY, PASTE, SELECT_ALL, SELECT_MODE)
     }
         
     val others = entries.filterNot { it in default || it in excludedKeys }
@@ -169,7 +337,7 @@ val defaultToolbarPref by lazy {
 val defaultPinnedToolbarPref by lazy {
     val pinnedDefault = when (helium314.keyboard.latin.BuildConfig.FLAVOR) {
         "offlinelite" -> listOf(CLIPBOARD)
-        else -> listOf(CLIPBOARD, PROOFREAD)
+        else -> listOf(CLIPBOARD, PROOFREAD, TOUCHPAD, TEXT_EDIT, FLOATING)
     }
 
     entries.filterNot { it in excludedKeys }.joinToString(Separators.ENTRY) {
@@ -193,12 +361,13 @@ fun upgradeToolbarPrefs(prefs: SharedPreferences) {
 
 private fun upgradeToolbarPref(prefs: SharedPreferences, pref: String, default: String) {
     if (!prefs.contains(pref)) return
-    val list = prefs.getString(pref, default)!!.split(Separators.ENTRY).toMutableList()
+    val originalString = prefs.getString(pref, default)!!
+    val list = originalString.split(Separators.ENTRY).toMutableList()
     val splitDefault = default.split(Separators.ENTRY)
     splitDefault.forEach { entry ->
         val keyWithSeparator = entry.substringBefore(Separators.KV) + Separators.KV
         if (list.none { it.startsWith(keyWithSeparator) })
-            list.add("${keyWithSeparator}false")
+            list.add(entry)
     }
     // likely not needed, but better prepare for possibility of key removal
     list.removeAll {
@@ -209,14 +378,17 @@ private fun upgradeToolbarPref(prefs: SharedPreferences, pref: String, default: 
             true
         }
     }
-    prefs.edit { putString(pref, list.joinToString(Separators.ENTRY)) }
+    val newString = list.joinToString(Separators.ENTRY)
+    if (newString != originalString) {
+        prefs.edit { putString(pref, newString) }
+    }
 }
 
 fun getEnabledToolbarKeys(prefs: SharedPreferences) = getEnabledToolbarKeys(prefs, Settings.PREF_TOOLBAR_KEYS, defaultToolbarPref)
 
 fun getPinnedToolbarKeys(prefs: SharedPreferences) = getEnabledToolbarKeys(prefs, Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref)
 
-fun getEnabledClipboardToolbarKeys(prefs: SharedPreferences) = getEnabledToolbarKeys(prefs, Settings.PREF_CLIPBOARD_TOOLBAR_KEYS, defaultClipboardToolbarPref)
+fun getEnabledClipboardToolbarKeys(prefs: SharedPreferences) = getEnabledToolbarKeys(prefs, Settings.PREF_CLIPBOARD_TOOLBAR_KEYS, defaultClipboardToolbarPref, flavorExcludedKeys)
 
 fun addPinnedKey(prefs: SharedPreferences, key: ToolbarKey) {
     // remove the existing version of this key and add the enabled one after the last currently enabled key
@@ -239,13 +411,14 @@ fun removePinnedKey(prefs: SharedPreferences, key: ToolbarKey) {
     prefs.edit { putString(Settings.PREF_PINNED_TOOLBAR_KEYS, result) }
 }
 
-private fun getEnabledToolbarKeys(prefs: SharedPreferences, pref: String, default: String): List<ToolbarKey> {
+private fun getEnabledToolbarKeys(prefs: SharedPreferences, pref: String, default: String, exclusions: Collection<ToolbarKey> = excludedKeys): List<ToolbarKey> {
     val string = prefs.getString(pref, default)!!
     return string.split(Separators.ENTRY).mapNotNull {
         val split = it.split(Separators.KV)
         if (split.last() == "true") {
             try {
-                ToolbarKey.valueOf(split.first())
+                val key = ToolbarKey.valueOf(split.first())
+                if (key in exclusions) null else key
             } catch (_: IllegalArgumentException) {
                 null
             }
@@ -287,3 +460,116 @@ fun clearCustomToolbarKeyCodes() {
 }
 
 private var customToolbarKeyCodes: EnumMap<ToolbarKey, Pair<Int?, Int?>>? = null
+
+fun isRepeatableToolbarKey(key: ToolbarKey): Boolean {
+    return when (key) {
+        LEFT, RIGHT, UP, DOWN,
+        WORD_LEFT, WORD_RIGHT,
+        PAGE_UP, PAGE_DOWN -> true
+        else -> false
+    }
+}
+
+class RepeatableKeyTouchListener(
+    private val onClick: (repeatCount: Int) -> Unit
+) : View.OnTouchListener {
+    private val handler = Handler(Looper.getMainLooper())
+    private var repeatCount = 0
+    private val runnable = object : Runnable {
+        override fun run() {
+            repeatCount++
+            onClick(repeatCount)
+            handler.postDelayed(this, 50L)
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouch(v: View, event: MotionEvent): Boolean {
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                repeatCount = 0
+                onClick(0)
+                handler.postDelayed(runnable, 400L)
+                v.isPressed = true
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                handler.removeCallbacks(runnable)
+                v.isPressed = false
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val x = event.x
+                val y = event.y
+                if (x < 0 || x > v.width || y < 0 || y > v.height) {
+                    handler.removeCallbacks(runnable)
+                    v.isPressed = false
+                }
+                return true
+            }
+        }
+        return false
+    }
+}
+
+class LongPressHintDrawable(private val base: Drawable) : Drawable() {
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+    }
+
+    init {
+        bounds = base.bounds
+    }
+
+    override fun draw(canvas: Canvas) {
+        base.draw(canvas)
+        val bounds = bounds
+        val radius = bounds.height() * 0.05f
+        val cx = bounds.right.toFloat() - radius * 3f
+        val cy = bounds.bottom.toFloat() - radius * 3f
+        hintPaint.color = Settings.getValues().mColors.get(ColorType.CLIPBOARD_PIN)
+        canvas.drawCircle(cx, cy, radius, hintPaint)
+    }
+
+    override fun onBoundsChange(bounds: Rect) {
+        base.bounds = bounds
+        super.onBoundsChange(bounds)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        base.alpha = alpha
+        hintPaint.alpha = (alpha * 0.5f).toInt()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        base.colorFilter = colorFilter
+    }
+
+    override fun setTint(tintColor: Int) {
+        base.setTint(tintColor)
+    }
+
+    override fun setTintList(tint: ColorStateList?) {
+        base.setTintList(tint)
+    }
+
+    override fun setTintMode(tintMode: PorterDuff.Mode?) {
+        base.setTintMode(tintMode)
+    }
+
+    @Deprecated("Deprecated in Java", ReplaceWith("PixelFormat.UNKNOWN", "android.graphics.PixelFormat"))
+    @Suppress("DEPRECATION")
+    override fun getOpacity(): Int = base.opacity
+
+    override fun isStateful(): Boolean = base.isStateful
+
+    override fun onStateChange(state: IntArray): Boolean {
+        return base.setState(state)
+    }
+
+    override fun getIntrinsicWidth(): Int = base.intrinsicWidth
+    override fun getIntrinsicHeight(): Int = base.intrinsicHeight
+    override fun getMinimumWidth(): Int = base.minimumWidth
+    override fun getMinimumHeight(): Int = base.minimumHeight
+}

@@ -22,7 +22,8 @@
     <helium314.keyboard.keyboard.emoji.EmojiCategoryPageIndicatorView
         android:id="@+id/emoji_category_page_id_view"
         android:layout_width="match_parent"
-        android:layout_height="2dip" />
+        android:layout_height="2dip"
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/emoji_search_container"

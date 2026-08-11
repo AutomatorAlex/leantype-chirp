@@ -27,9 +27,13 @@ class ClipboardDao private constructor(private val db: Database) {
         fun onClipInserted(position: Int)
         fun onClipsRemoved(position: Int, count: Int)
         fun onClipMoved(oldPosition: Int, newPosition: Int)
+        fun onClipChanged(position: Int) {}
     }
 
     var listener: Listener? = null
+
+    var isClosed = false
+        private set
 
     // we clean up old clips when a new clip is added, but not too frequently
     private var lastClearOldClips = 0L
@@ -43,7 +47,7 @@ class ClipboardDao private constructor(private val db: Database) {
             null,
             null,
             null,
-            "$COLUMN_PINNED, $COLUMN_TIMESTAMP DESC" // was only relevant in the initial approach of using a cursor instead of a cache
+            "$COLUMN_TIMESTAMP DESC"
         ).use {
             while (it.moveToNext()) {
                 val text = it.getString(3) ?: ""
@@ -54,6 +58,7 @@ class ClipboardDao private constructor(private val db: Database) {
         sort()
     }
 
+    @Synchronized
     fun addClip(timestamp: Long, pinned: Boolean, text: String, imageUri: String? = null) {
         clearOldClips()
         val existingIndex = cache.indexOfFirst { it.text == text && it.imageUri == imageUri }
@@ -66,6 +71,7 @@ class ClipboardDao private constructor(private val db: Database) {
         insertNewEntry(timestamp, pinned, text, imageUri)
     }
 
+    @Synchronized
     private fun insertNewEntry(timestamp: Long, pinned: Boolean, text: String, imageUri: String?) {
         val cv = ContentValues(4)
         cv.put(COLUMN_TIMESTAMP, timestamp)
@@ -80,6 +86,7 @@ class ClipboardDao private constructor(private val db: Database) {
         listener?.onClipInserted(cache.indexOf(entry))
     }
 
+    @Synchronized
     private fun updateTimestampAt(index: Int, timestamp: Long) {
         val entry = cache[index]
         entry.timeStamp = timestamp
@@ -90,22 +97,41 @@ class ClipboardDao private constructor(private val db: Database) {
         db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = ${entry.id}", null)
     }
 
+    @Synchronized
+    fun updateClipText(id: Long, newText: String) {
+        val entry = cache.firstOrNull { it.id == id } ?: return
+        entry.text = newText
+        val cv = ContentValues(1)
+        cv.put(COLUMN_TEXT, newText)
+        db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = ${entry.id}", null)
+        val pos = cache.indexOf(entry)
+        if (pos != -1) {
+            listener?.onClipChanged(pos)
+        }
+    }
+
+    @Synchronized
     fun isPinned(index: Int) = cache[index].isPinned
 
+    @Synchronized
     fun getAt(index: Int) = cache[index]
 
+    @Synchronized
     fun getClips(): List<ClipboardHistoryEntry> = cache.toList()
 
+    @Synchronized
     fun get(id: Long) = cache.first { it.id == id }
 
+    @Synchronized
     fun count() = cache.size
 
+    @Synchronized
     fun sort() = cache.sort()
 
+    @Synchronized
     fun togglePinned(id: Long) {
         val entry = cache.first { it.id == id }
         entry.isPinned = !entry.isPinned
-        entry.timeStamp = System.currentTimeMillis()
         if (listener != null) {
             val oldPos = cache.indexOf(entry)
             cache.sort()
@@ -114,13 +140,13 @@ class ClipboardDao private constructor(private val db: Database) {
         } else {
             cache.sort()
         }
-        val cv = ContentValues(2)
+        val cv = ContentValues(1)
         cv.put(COLUMN_PINNED, entry.isPinned)
-        cv.put(COLUMN_TIMESTAMP, entry.timeStamp)
         db.writableDatabase.update(TABLE, cv, "$COLUMN_ID = ${entry.id}", null)
     }
 
     // RecyclerView initiates this, so we don't call listener (or we'll get an IndexOutOfRangeException from RecyclerView)
+    @Synchronized
     fun deleteClipAt(index: Int): ClipboardHistoryEntry? {
         if (index < 0 || index >= cache.size) return null
         val entry = cache[index]
@@ -130,6 +156,7 @@ class ClipboardDao private constructor(private val db: Database) {
     }
 
     /** Re-insert a previously deleted entry (for undo). */
+    @Synchronized
     fun restoreClip(entry: ClipboardHistoryEntry) {
         val cv = ContentValues(5)
         cv.put(COLUMN_ID, entry.id)
@@ -143,6 +170,7 @@ class ClipboardDao private constructor(private val db: Database) {
         listener?.onClipInserted(cache.indexOf(entry))
     }
 
+    @Synchronized
     fun clearOldClips(now: Boolean = false) {
         if (listener != null)
             return // never clear when clipboard is visible
@@ -159,6 +187,7 @@ class ClipboardDao private constructor(private val db: Database) {
         db.writableDatabase.delete(TABLE, "$COLUMN_TIMESTAMP < $minTime AND $COLUMN_PINNED = 0", null)
     }
 
+    @Synchronized
     fun clearNonPinned() {
         if (listener != null) {
             val indicesToRemove = mutableListOf<Int>()
@@ -176,6 +205,7 @@ class ClipboardDao private constructor(private val db: Database) {
         db.writableDatabase.delete(TABLE, "$COLUMN_PINNED = 0", null)
     }
 
+    @Synchronized
     fun clear() {
         if (count() == 0) return
         cache.clear()
@@ -207,6 +237,7 @@ class ClipboardDao private constructor(private val db: Database) {
         private var instance: ClipboardDao? = null
 
         /** Returns the instance or creates a new one. Returns null if instance can't be created (e.g. no access to db due to device being locked) */
+        @Synchronized
         fun getInstance(context: Context): ClipboardDao? {
             if (instance == null)
                 try {
@@ -215,6 +246,15 @@ class ClipboardDao private constructor(private val db: Database) {
                     Log.e(TAG, "can't create ClipboardDao", e)
                 }
             return instance
+        }
+
+        @Synchronized
+        fun closeInstance() {
+            instance?.let {
+                it.isClosed = true
+                it.db.close()
+            }
+            instance = null
         }
     }
 }

@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.R
 import helium314.keyboard.settings.preferences.PreferenceCategory
 
+import helium314.keyboard.latin.utils.prefs
+
 @Composable
 fun SearchSettingsScreen(
     onClickBack: () -> Unit,
@@ -60,6 +62,8 @@ fun SearchSettingsScreen(
     settings: List<Any?>,
     content: @Composable (ColumnScope.() -> Unit)? = null // overrides settings if not null
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val customCount = context.prefs().getInt("custom_layouts_count", 0)
     SearchScreen(
         onClickBack = onClickBack,
         title = {
@@ -104,14 +108,14 @@ fun SearchSettingsScreen(
                             .fillMaxSize(),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
                     ) {
-                        items(groups) { (titleRes, keys) ->
+                        items(groups, key = { (titleRes, keys) -> titleRes?.toString() ?: keys.firstOrNull() ?: keys.hashCode().toString() }) { (titleRes, keys) ->
                             androidx.compose.material3.Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 colors = androidx.compose.material3.CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainer
-                                )
+                                 )
                             ) {
                                 Column {
                                     if (titleRes != null) {
@@ -119,7 +123,9 @@ fun SearchSettingsScreen(
                                     }
                                     
                                     keys.forEach { key ->
-                                        SettingsActivity.settingsContainer[key]?.Preference()
+                                        androidx.compose.runtime.key(key) {
+                                            SettingsActivity.settingsContainer[key]?.Preference()
+                                        }
                                     }
                                 }
                             }
@@ -131,6 +137,11 @@ fun SearchSettingsScreen(
         filteredItems = { 
             SettingsActivity.settingsContainer.filter(it).filter { setting ->
                 val key = setting.key
+                if (key.startsWith(helium314.keyboard.latin.settings.Settings.PREF_LAYOUT_PREFIX + "CUSTOM")) {
+                    val index = key.removePrefix(helium314.keyboard.latin.settings.Settings.PREF_LAYOUT_PREFIX + "CUSTOM").toIntOrNull() ?: 0
+                    if (index > customCount) return@filter false
+                }
+                if (key == "add_custom_layout") return@filter false
                 when (helium314.keyboard.latin.BuildConfig.FLAVOR) {
                     "offlinelite" -> {
                         !key.startsWith("gemini") &&
@@ -162,6 +173,7 @@ fun <T: Any?> SearchScreen(
     itemContent: @Composable (T) -> Unit,
     icon: @Composable (() -> Unit)? = null,
     menu: List<Pair<String, () -> Unit>>? = null,
+    headerContent: (@Composable () -> Unit)? = null,
     content: @Composable (ColumnScope.() -> Unit)? = null,
 ) {
     // searchText and showSearch should have the same remember or rememberSaveable
@@ -242,11 +254,16 @@ fun <T: Any?> SearchScreen(
                         content()
                     }
                 } else {
-                    val items = filteredItems(searchText.text)
+                    val items = remember(searchText.text, filteredItems) { filteredItems(searchText.text) }
                     Scaffold(
                         contentWindowInsets = WindowInsets(0)
                     ) { innerPadding ->
                         LazyColumn(contentPadding = innerPadding) {
+                            if (searchText.text.isBlank() && headerContent != null) {
+                                item {
+                                    headerContent()
+                                }
+                            }
                             items(items) {
                                 itemContent(it)
                             }

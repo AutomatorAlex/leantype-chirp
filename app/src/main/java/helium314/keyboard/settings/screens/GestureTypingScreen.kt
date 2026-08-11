@@ -37,19 +37,16 @@ fun GestureTypingScreen(
     val b = (LocalContext.current.getActivity() as? SettingsActivity)?.prefChanged?.collectAsState()
     if ((b?.value ?: 0) < 0)
         Log.v("irrelevant", "stupid way to trigger recomposition on preference change")
-    val hasGestureLib = JniUtils.sHaveGestureLib
+    val hasGestureLib = JniUtils.sHaveNativeGestureLib
     val gestureFloatingPreviewEnabled = prefs.getBoolean(Settings.PREF_GESTURE_FLOATING_PREVIEW_TEXT, Defaults.PREF_GESTURE_FLOATING_PREVIEW_TEXT)
-    val gestureEnabled = hasGestureLib && prefs.getBoolean(Settings.PREF_GESTURE_INPUT, Defaults.PREF_GESTURE_INPUT)
+    val gestureEnabled = prefs.getBoolean(Settings.PREF_GESTURE_INPUT, Defaults.PREF_GESTURE_INPUT)
     
-    // Always show library loader first when no library
     val items = buildList {
         add(R.string.settings_category_configuration)
-        // Library loader is always first if allowed
+        add(Settings.PREF_GESTURE_INPUT)
         if (helium314.keyboard.latin.BuildConfig.BUILD_TYPE != "nouserlib") {
             add(SettingsWithoutKey.LOAD_GESTURE_LIB)
         }
-        // Show all gesture settings (they will be disabled if no library)
-        add(Settings.PREF_GESTURE_INPUT)
 
         if (hasGestureLib && gestureEnabled) {
             add(R.string.settings_category_visuals)
@@ -63,13 +60,18 @@ fun GestureTypingScreen(
             add(R.string.settings_category_behavior)
             add(Settings.PREF_GESTURE_SPACE_AWARE)
             add(Settings.PREF_GESTURE_FAST_TYPING_COOLDOWN)
+            add(Settings.PREF_AUTOSPACE_BEFORE_GESTURE_TYPING)
+            add(Settings.PREF_AUTOSPACE_AFTER_GESTURE_TYPING)
         }
 
         add(R.string.settings_category_gestures_advanced)
         add(Settings.PREF_SPACE_HORIZONTAL_SWIPE)
         add(Settings.PREF_SPACE_VERTICAL_SWIPE)
-        add(Settings.PREF_TOUCHPAD_SENSITIVITY)
         add(Settings.PREF_DELETE_SWIPE)
+
+        add(R.string.settings_category_touchpad)
+        add(Settings.PREF_TOUCHPAD_SENSITIVITY)
+        add(Settings.PREF_TOUCHPAD_FULLSCREEN)
     }
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -106,6 +108,12 @@ fun createGestureTypingSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_GESTURE_SPACE_AWARE, R.string.gesture_space_aware, R.string.gesture_space_aware_summary) {
         SwitchPreference(it, Defaults.PREF_GESTURE_SPACE_AWARE)
+    },
+    Setting(context, Settings.PREF_AUTOSPACE_AFTER_GESTURE_TYPING, R.string.autospace_after_gesture_typing) {
+        SwitchPreference(it, Defaults.PREF_AUTOSPACE_AFTER_GESTURE_TYPING)
+    },
+    Setting(context, Settings.PREF_AUTOSPACE_BEFORE_GESTURE_TYPING, R.string.autospace_before_gesture_typing) {
+        SwitchPreference(it, Defaults.PREF_AUTOSPACE_BEFORE_GESTURE_TYPING)
     },
     Setting(context, Settings.PREF_GESTURE_FAST_TYPING_COOLDOWN, R.string.gesture_fast_typing_cooldown) { def ->
         SliderPreference(
@@ -160,6 +168,9 @@ fun createGestureTypingSettings(context: Context) = listOf(
             range = 0f..100f,
             description = { value -> value.toInt().toString() }
         )
+    },
+    Setting(context, Settings.PREF_TOUCHPAD_FULLSCREEN, R.string.touchpad_fullscreen, R.string.touchpad_fullscreen_summary) {
+        SwitchPreference(it, Defaults.PREF_TOUCHPAD_FULLSCREEN)
     },
     Setting(context, Settings.PREF_DELETE_SWIPE, R.string.delete_swipe, R.string.delete_swipe_summary) {
         SwitchPreference(it, Defaults.PREF_DELETE_SWIPE)

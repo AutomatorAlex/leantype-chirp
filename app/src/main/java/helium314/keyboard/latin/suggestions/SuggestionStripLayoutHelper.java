@@ -37,6 +37,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import helium314.keyboard.accessibility.AccessibilityUtils;
+import helium314.keyboard.keyboard.KeyboardSwitcher;
 import helium314.keyboard.latin.PunctuationSuggestions;
 import helium314.keyboard.latin.R;
 import helium314.keyboard.latin.SuggestedWords;
@@ -99,6 +100,7 @@ final class SuggestionStripLayoutHelper {
     private static final int AUTO_CORRECT_BOLD = 0x01;
     private static final int AUTO_CORRECT_UNDERLINE = 0x02;
     private static final int VALID_TYPED_WORD_BOLD = 0x04;
+    private static final String[] SUPERSCRIPT_DIGITS = new String[] { "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹" };
 
     public SuggestionStripLayoutHelper(final Context context, final AttributeSet attrs,
             final int defStyle, final ArrayList<TextView> wordViews,
@@ -319,6 +321,9 @@ final class SuggestionStripLayoutHelper {
         final int color;
         if (indexInSuggestedWords == SuggestedWords.INDEX_OF_AUTO_CORRECTION && suggestedWords.mWillAutoCorrect) {
             color = mColorAutoCorrect;
+        } else if (suggestedWords.isPrediction() && indexInSuggestedWords == 0) {
+            // ponytail: first word prediction should be colored active/bright
+            color = mColorAutoCorrect;
         } else if (isTypedWord && suggestedWords.mTypedWordValid) {
             color = mColorValidTypedWord;
         } else if (isTypedWord) {
@@ -368,6 +373,7 @@ final class SuggestionStripLayoutHelper {
                 suggestedWords, mSuggestionsCountInStrip);
         final TextView centerWordView = mWordViews.get(mCenterPositionInStrip);
         final int stripWidth = stripView.getWidth();
+
         final int centerWidth = getSuggestionWidth(mCenterPositionInStrip, stripWidth);
         if (wordCountToShow == 1 || getTextScaleX(centerWordView.getText(), centerWidth,
                 centerWordView.getPaint()) < MIN_TEXT_XSCALE) {
@@ -520,13 +526,23 @@ final class SuggestionStripLayoutHelper {
             // {@link TextView#getTag()} is used to get the index in suggestedWords at
             // {@link SuggestionStripView#onClick(View)}.
             wordView.setTag(indexInSuggestedWords);
-            wordView.setText(getStyledSuggestedWord(suggestedWords, indexInSuggestedWords));
+            CharSequence label = getStyledSuggestedWord(suggestedWords, indexInSuggestedWords);
+            final KeyboardSwitcher switcher = KeyboardSwitcher.getInstance();
+            final boolean isPhysicalKeyboardInUse = switcher.isImeSuppressedByHardwareKeyboard(
+                    Settings.getValues(), switcher.getKeyboardSwitchState());
+            final boolean showShortcuts = isPhysicalKeyboardInUse
+                    && !Settings.getValues().mPhysicalKeyboardSuggestionShortcuts.equals("disabled");
+            if (showShortcuts && positionInStrip >= 0 && positionInStrip < SUPERSCRIPT_DIGITS.length && !TextUtils.isEmpty(label)) {
+                label = label.toString() + " " + SUPERSCRIPT_DIGITS[positionInStrip];
+            }
+            wordView.setText(label);
             wordView.setTextColor(getSuggestionTextColor(suggestedWords, indexInSuggestedWords));
 
-            if (emojiTypeface != null && StringUtilsKt.isEmoji(wordView.getText()))
+            if (emojiTypeface != null && StringUtilsKt.isEmoji(wordView.getText())) {
                 wordView.setTypeface(emojiTypeface);
-            else
-                wordView.setTypeface(Typeface.DEFAULT); // todo: maybe use user-provided typeface here?
+            } else {
+                wordView.setTypeface(getTextTypeface(wordView.getText()));
+            }
             if (SuggestionStripView.DEBUG_SUGGESTIONS) {
                 mDebugInfoViews.get(positionInStrip).setText(suggestedWords.getDebugString(indexInSuggestedWords));
             }
@@ -648,6 +664,11 @@ final class SuggestionStripLayoutHelper {
     }
 
     private static Typeface getTextTypeface(@Nullable final CharSequence text) {
-        return hasStyleSpan(text, BOLD_SPAN) ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT;
+        final Typeface customTypeface = Settings.getInstance().getCustomTypeface();
+        final boolean isBold = hasStyleSpan(text, BOLD_SPAN);
+        if (customTypeface != null) {
+            return isBold ? Typeface.create(customTypeface, Typeface.BOLD) : customTypeface;
+        }
+        return isBold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT;
     }
 }

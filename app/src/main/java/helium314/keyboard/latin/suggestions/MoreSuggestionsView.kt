@@ -5,6 +5,7 @@
  */
 package helium314.keyboard.latin.suggestions
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
 import android.view.GestureDetector
@@ -15,6 +16,7 @@ import helium314.keyboard.accessibility.AccessibilityUtils
 import helium314.keyboard.keyboard.Key
 import helium314.keyboard.keyboard.Keyboard
 import helium314.keyboard.keyboard.KeyboardActionListener
+import helium314.keyboard.keyboard.KeyboardSwitcher
 import helium314.keyboard.keyboard.MainKeyboardView
 import helium314.keyboard.keyboard.PopupKeysKeyboardView
 import helium314.keyboard.keyboard.PopupKeysPanel
@@ -201,6 +203,92 @@ class MoreSuggestionsView @JvmOverloads constructor(
         }
         motionEvent.action = hoverAction
         onHoverEvent(motionEvent)
+    }
+
+    private val longPressHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingLongPressRunnable: Runnable? = null
+    private var activeKeyForLongPress: Key? = null
+    private var isLongPressed = false
+
+    private fun startLongPressTimer(key: Key) {
+        cancelLongPressTimer()
+        isLongPressed = false
+        activeKeyForLongPress = key
+        val runnable = Runnable {
+            isLongPressed = true
+            onLongPressKey(key)
+            cancelLongPressTimer()
+        }
+        pendingLongPressRunnable = runnable
+        longPressHandler.postDelayed(runnable, 500)
+    }
+
+    private fun cancelLongPressTimer() {
+        pendingLongPressRunnable?.let {
+            longPressHandler.removeCallbacks(it)
+        }
+        pendingLongPressRunnable = null
+        activeKeyForLongPress = null
+    }
+
+    private fun findKeyAt(x: Int, y: Int): Key? {
+        val keyboard = keyboard ?: return null
+        for (key in keyboard.sortedKeys) {
+            if (key.isOnKey(x, y)) {
+                return key
+            }
+        }
+        return null
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(me: MotionEvent): Boolean {
+        val action = me.actionMasked
+        val index = me.actionIndex
+        val x = me.getX(index).toInt()
+        val y = me.getY(index).toInt()
+
+        when (action) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                isLongPressed = false
+                val key = findKeyAt(x, y)
+                if (key != null) {
+                    startLongPressTimer(key)
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val key = findKeyAt(x, y)
+                if (key != activeKeyForLongPress) {
+                    cancelLongPressTimer()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                cancelLongPressTimer()
+                if (isLongPressed) {
+                    isLongPressed = false
+                    return true
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                cancelLongPressTimer()
+                isLongPressed = false
+            }
+        }
+        return super.onTouchEvent(me)
+    }
+
+    fun onLongPressKey(key: Key) {
+        if (key !is MoreSuggestionKey) return
+        val keyboard = keyboard
+        if (keyboard !is MoreSuggestions) return
+        val suggestedWords = keyboard.mSuggestedWords
+        val index = key.mSuggestedWordIndex
+        if (index < 0 || index >= suggestedWords.size()) return
+        val word = suggestedWords.getInfo(index).word
+
+        listener.removeSuggestion(word)
+        dismissPopupKeysPanel()
+        KeyboardSwitcher.getInstance().showToast("\"$word\" removed", true)
     }
 
     companion object {

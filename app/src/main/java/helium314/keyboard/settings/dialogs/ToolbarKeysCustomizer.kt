@@ -50,7 +50,7 @@ fun ToolbarKeysCustomizer(
     var showDeletePrefConfirmDialog by rememberSaveable { mutableStateOf(false) }
     ThreeButtonAlertDialog(
         onDismissRequest = onDismissRequest,
-        cancelButtonText = stringResource(R.string.dialog_close),
+        cancelButtonText = null,
         confirmButtonText = null,
         onConfirmed = { },
         neutralButtonText = if (readCustomKeyCodes(prefs).isNotEmpty()) stringResource(R.string.button_default) else null,
@@ -60,7 +60,7 @@ fun ToolbarKeysCustomizer(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(ToolbarKey.entries) {
+                items(ToolbarKey.entries, key = { it.name }) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { showKeyCustomizer = it }.fillParentMaxWidth()

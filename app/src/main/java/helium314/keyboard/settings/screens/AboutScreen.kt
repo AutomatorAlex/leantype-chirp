@@ -11,17 +11,31 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import java.io.File
 import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.common.Links
@@ -56,8 +70,9 @@ fun AboutScreen(
         SettingsWithoutKey.VERSION,
         SettingsWithoutKey.LICENSE,
         SettingsWithoutKey.HIDDEN_FEATURES,
-        SettingsWithoutKey.GITHUB_WIKI,
+        SettingsWithoutKey.GITHUB_FEATURES,
         SettingsWithoutKey.GITHUB,
+        SettingsWithoutKey.SPONSOR,
         SettingsWithoutKey.SAVE_LOG,
     )
     SearchSettingsScreen(
@@ -132,14 +147,14 @@ fun createAboutSettings(context: Context) = listOf(
             icon = R.drawable.ic_settings_about_hidden_features
         )
     },
-    Setting(context, SettingsWithoutKey.GITHUB_WIKI, R.string.about_wiki_link, R.string.about_wiki_link_description) {
+    Setting(context, SettingsWithoutKey.GITHUB_FEATURES, R.string.about_features_link, R.string.about_features_link_description) {
         val ctx = LocalContext.current
         Preference(
             name = it.title,
             description = it.description,
             onClick = {
                 val intent = Intent()
-                intent.data = Links.WIKI_URL.toUri()
+                intent.data = Links.FEATURES_URL.toUri()
                 intent.action = Intent.ACTION_VIEW
                 ctx.startActivity(intent)
             },
@@ -160,7 +175,24 @@ fun createAboutSettings(context: Context) = listOf(
             icon = R.drawable.ic_settings_about_github
         )
     },
+    Setting(context, SettingsWithoutKey.SPONSOR, R.string.about_sponsor_link, R.string.about_sponsor_link_description) {
+        val ctx = LocalContext.current
+        Preference(
+            name = it.title,
+            description = it.description,
+            onClick = {
+                val intent = Intent()
+                intent.data = Links.SPONSOR.toUri()
+                intent.action = Intent.ACTION_VIEW
+                ctx.startActivity(intent)
+            },
+            // Re-using the github icon or using a generic heart/sponsor icon if available. We will use ic_settings_about_github for now or a generic one. Let's see what icons we have. Let's try R.drawable.ic_keyboard_settings or similar, actually R.drawable.ic_settings_about_github might be okay if we don't have a sponsor one. Wait, let's look for a heart icon. Let's just use ic_settings_about_github for now and change it if needed.
+            icon = R.drawable.ic_settings_about_github
+        )
+    },
+
     Setting(context, SettingsWithoutKey.SAVE_LOG, R.string.save_log) { setting ->
+        var showDialog by rememberSaveable { mutableStateOf(false) }
         val ctx = LocalContext.current
         val scope = rememberCoroutineScope()
         val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -168,10 +200,23 @@ fun createAboutSettings(context: Context) = listOf(
             val uri = result.data?.data ?: return@rememberLauncherForActivityResult
             scope.launch(Dispatchers.IO) {
                 ctx.getActivity()?.contentResolver?.openOutputStream(uri)?.use { os ->
-                    os.writer().use { writer ->
-                        val logcat = ProcessBuilder("logcat", "-d", "-b", "all", "*:W").start().inputStream.use { it.reader().readText() }
-                        val internal = Log.getLog().joinToString("\n")
-                        writer.write(logcat + "\n\n" + internal)
+                    os.bufferedWriter().use { writer ->
+                        // Stream the logcat line by line to avoid allocating a multi-MB
+                        // String in memory (the IME process can OOM on long-running devices).
+                        ProcessBuilder("logcat", "-d", "-b", "all", "*:W").start().inputStream.use { stream ->
+                            stream.bufferedReader().useLines { lines: Sequence<String> ->
+                                for (line: String in lines) {
+                                    writer.write(line)
+                                    writer.newLine()
+                                }
+                            }
+                        }
+                        writer.newLine()
+                        writer.newLine()
+                        for (line in Log.getLog()) {
+                            writer.write(line.toString())
+                            writer.newLine()
+                        }
                     }
                 }
             }
@@ -179,20 +224,107 @@ fun createAboutSettings(context: Context) = listOf(
         Preference(
             name = setting.title,
             description = setting.description,
-            onClick = {
-                val date = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Calendar.getInstance().time)
-                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
-                    .addCategory(Intent.CATEGORY_OPENABLE)
-                    .putExtra(
-                        Intent.EXTRA_TITLE,
-                        ctx.getString(R.string.english_ime_name)
-                            .replace(" ", "_") + "_log_$date.txt"
-                    )
-                    .setType("text/plain")
-                launcher.launch(intent)
-            },
+            onClick = { showDialog = true },
             icon = R.drawable.ic_settings_about_log
         )
+        if (showDialog) {
+            helium314.keyboard.settings.dialogs.PreferenceDialog(
+                onDismissRequest = { showDialog = false },
+                title = stringResource(R.string.log_options_title),
+                showCloseButton = true,
+                buttons = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                showDialog = false
+                                val date = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Calendar.getInstance().time)
+                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                                    .addCategory(Intent.CATEGORY_OPENABLE)
+                                    .putExtra(
+                                        Intent.EXTRA_TITLE,
+                                        ctx.getString(R.string.english_ime_name)
+                                            .replace(" ", "_") + "_log_$date.txt"
+                                    )
+                                    .setType("text/plain")
+                                launcher.launch(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.save_log_to_file))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                showDialog = false
+                                scope.launch(Dispatchers.IO) {
+                                    val logsDir = File(ctx.cacheDir, "logs")
+                                    logsDir.mkdirs()
+                                    val date = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Calendar.getInstance().time)
+                                    val logFile = File(logsDir, "${ctx.getString(R.string.english_ime_name).replace(" ", "_")}_log_$date.txt")
+                                    logFile.bufferedWriter().use { writer ->
+                                        try {
+                                            ProcessBuilder("logcat", "-d", "-b", "all", "*:W").start().inputStream.use { stream ->
+                                                stream.bufferedReader().useLines { lines ->
+                                                    for (line in lines) {
+                                                        writer.write(line)
+                                                        writer.newLine()
+                                                    }
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("AboutScreen", "Error reading logcat for share", e)
+                                        }
+                                        writer.newLine()
+                                        writer.newLine()
+                                        for (line in Log.getLog()) {
+                                            writer.write(line.toString())
+                                            writer.newLine()
+                                        }
+                                    }
+                                    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", logFile)
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    scope.launch(Dispatchers.Main) {
+                                        ctx.startActivity(Intent.createChooser(shareIntent, ctx.getString(R.string.share_log)))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.share_log))
+                        }
+                        Button(
+                            onClick = {
+                                showDialog = false
+                                Log.clear()
+                                scope.launch(Dispatchers.IO) {
+                                    try {
+                                        ProcessBuilder("logcat", "-c").start().waitFor()
+                                    } catch (e: Exception) {
+                                        Log.e("AboutScreen", "Error clearing logcat", e)
+                                    }
+                                }
+                                Toast.makeText(ctx, R.string.log_cleared, Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.clear_log))
+                        }
+                    }
+                }
+            )
+        }
     },
 )
 

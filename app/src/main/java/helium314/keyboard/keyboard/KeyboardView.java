@@ -80,6 +80,7 @@ public class KeyboardView extends View {
     private final KeyDrawParams mKeyDrawParams = new KeyDrawParams();
 
     // Drawing
+    private final java.util.Map<Key, Integer> mKeyCustomBgColors = new java.util.HashMap<>();
     /** True if all keys should be drawn */
     private boolean mInvalidateAllKeys;
     /** The keys that should be drawn */
@@ -188,6 +189,7 @@ public class KeyboardView extends View {
      * @param keyboard the keyboard to display in this view
      */
     public void setKeyboard(@NonNull final Keyboard keyboard) {
+        mKeyCustomBgColors.clear();
         if (keyboard instanceof MoreSuggestions) {
             mColors.setBackground(this, ColorType.MORE_SUGGESTIONS_BACKGROUND);
         } else if (keyboard instanceof PopupKeysKeyboard) {
@@ -203,7 +205,11 @@ public class KeyboardView extends View {
         mKeyDrawParams.updateParams(scaledKeyHeight, mKeyVisualAttributes);
         mKeyDrawParams.updateParams(scaledKeyHeight, keyboard.mKeyVisualAttributes);
         invalidateAllKeys();
-        requestLayout();
+        if (isInLayout()) {
+            post(this::requestLayout);
+        } else {
+            requestLayout();
+        }
         if (mKeyboard.mId.mElementId == KeyboardId.ELEMENT_EMOJI_CATEGORY10) {
             mFontSizeMultiplier = Settings.getValues().mFontSizeMultiplierEmoji * 0.55f;
         } else {
@@ -392,18 +398,77 @@ public class KeyboardView extends View {
         background.setBounds(0, 0, bgWidth, bgHeight);
         canvas.translate(bgX, bgY);
         
-        final boolean isShiftLocked = key.getCode() == KeyCode.SHIFT && key.isLocked();
-        if (isShiftLocked) {
+        final boolean isSelected = (key.getCode() == KeyCode.SHIFT && key.isLocked())
+                || (key.getCode() == KeyCode.TOGGLE_SELECTION_MODE && KeyboardActionListenerImpl.sPersistentSelectionModeActive);
+        
+        boolean hasCustomTint = false;
+        if (KeyboardActionListenerImpl.sPersistentTextEditModeActive) {
+            int customColor = 0;
+            switch (key.getCode()) {
+                case -131: // Undo
+                case -132: // Redo
+                case -7:   // delete
+                    customColor = mColors.get(ColorType.EDIT_MODE_DELETE_BACKGROUND);
+                    break;
+                case -35:  // All
+                case -34:  // Word
+                case -306: // Select
+                case -32:  // Cut
+                case -31:  // Copy
+                case -33:  // Paste
+                    customColor = mColors.get(ColorType.EDIT_MODE_FUNC_BACKGROUND);
+                    break;
+                case -201: // alpha (✕)
+                    customColor = mColors.get(ColorType.EDIT_MODE_ALPHA_BACKGROUND);
+                    break;
+                case -23:  // Up
+                case -24:  // Down
+                case -21:  // Left
+                case -22:  // Right
+                case 32:   // space
+                    customColor = mColors.get(ColorType.EDIT_MODE_NAV_BACKGROUND);
+                    break;
+                case -25:  // Doc Start
+                case -26:  // Doc End
+                case -27:  // Line Start
+                case -28:  // Line End
+                case -10015: // Word Left
+                case -10016: // Word Right
+                    customColor = mColors.get(ColorType.EDIT_MODE_JUMP_BACKGROUND);
+                    break;
+            }
+            if (customColor != 0) {
+                androidx.core.graphics.drawable.DrawableCompat.setTint(background, customColor);
+                mKeyCustomBgColors.put(key, customColor);
+                hasCustomTint = true;
+            }
+        }
+        
+        if (isSelected) {
             background.setColorFilter(Color.argb(0x80, 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
         }
         
         background.draw(canvas);
         
-        if (isShiftLocked) {
+        if (isSelected) {
             background.clearColorFilter();
+        }
+        if (hasCustomTint) {
+            final ColorType originalType = key.getBackgroundType() == Key.BACKGROUND_TYPE_FUNCTIONAL 
+                ? ColorType.FUNCTIONAL_KEY_BACKGROUND 
+                : ColorType.KEY_BACKGROUND;
+            mColors.setColor(background, originalType);
         }
         
         canvas.translate(-bgX, -bgY);
+    }
+
+    private static int blend(int c1, int c2, float ratio) {
+        float inverseRatio = 1f - ratio;
+        float r = Color.red(c1) * ratio + Color.red(c2) * inverseRatio;
+        float g = Color.green(c1) * ratio + Color.green(c2) * inverseRatio;
+        float b = Color.blue(c1) * ratio + Color.blue(c2) * inverseRatio;
+        return Color.rgb((int) r, (int) g, (int) b);
     }
 
     // Draw key top visuals.
@@ -446,7 +511,7 @@ public class KeyboardView extends View {
                 labelX = centerX;
                 paint.setTextAlign(Align.CENTER);
             }
-            if (key.needsAutoXScale()) {
+            if (key.needsAutoXScale() || (StringUtilsKt.isEmoji(label) && Settings.getValues().mEmojiKeyFit)) {
                 final int width;
                 if (key.needsToKeepBackgroundAspectRatio(mDefaultKeyLabelFlags)) {
                     // make sure the text stays inside bounds of background drawable
@@ -457,7 +522,7 @@ public class KeyboardView extends View {
                     width = keyWidth;
                 final float ratio = Math.min(1.0f,
                         (width * MAX_LABEL_RATIO) / TypefaceUtils.getStringWidth(label, paint));
-                if (key.needsAutoScale()) {
+                if (key.needsAutoScale() || (StringUtilsKt.isEmoji(label) && Settings.getValues().mEmojiKeyFit)) {
                     final float autoSize = paint.getTextSize() * ratio;
                     paint.setTextSize(autoSize);
                 } else {
@@ -466,7 +531,9 @@ public class KeyboardView extends View {
             }
 
             if (key.isEnabled()) {
-                if (StringUtilsKt.isEmoji(label))
+                if (mKeyCustomBgColors.containsKey(key)) {
+                    paint.setColor(getContrastingColor(mKeyCustomBgColors.get(key)));
+                } else if (StringUtilsKt.isEmoji(label))
                     paint.setColor(key.selectTextColor(params) | 0xFF000000); // ignore alpha for emojis (though
                                                                               // actually color isn't applied anyway and
                                                                               // we could just set white)
@@ -476,7 +543,8 @@ public class KeyboardView extends View {
                     paint.setColor(mColors.get(ColorType.EMOJI_KEY_TEXT));
                 else if (this instanceof PopupKeysKeyboardView) {
                     if (key.isPressed()) {
-                        paint.setColor(Color.BLACK); // Focused key: Black text
+                        int pressedBgColor = mColors.getPressedColor(key.hasActionKeyBackground() ? ColorType.ACTION_KEY_POPUP_KEYS_BACKGROUND : ColorType.POPUP_KEYS_BACKGROUND);
+                        paint.setColor(getContrastingColor(pressedBgColor));
                     } else {
                         paint.setColor(mColors.get(ColorType.POPUP_KEY_TEXT)); // Unfocused: Theme default
                     }
@@ -677,8 +745,42 @@ public class KeyboardView extends View {
         freeOffscreenBuffer();
     }
 
+    private static int getCompositeColor(int srcColor, int dstColor) {
+        int alpha = (srcColor >> 24) & 0xFF;
+        if (alpha == 0xFF) return srcColor;
+        if (alpha == 0x00) return dstColor;
+        
+        float fAlpha = alpha / 255f;
+        int srcR = (srcColor >> 16) & 0xFF;
+        int srcG = (srcColor >> 8) & 0xFF;
+        int srcB = srcColor & 0xFF;
+        
+        int dstR = (dstColor >> 16) & 0xFF;
+        int dstG = (dstColor >> 8) & 0xFF;
+        int dstB = dstColor & 0xFF;
+        
+        int r = Math.round(srcR * fAlpha + dstR * (1 - fAlpha));
+        int g = Math.round(srcG * fAlpha + dstG * (1 - fAlpha));
+        int b = Math.round(srcB * fAlpha + dstB * (1 - fAlpha));
+        
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
+    private int getContrastingColor(int bgColor) {
+        int baseBg = mColors.get(ColorType.MAIN_BACKGROUND);
+        int compositeBg = getCompositeColor(bgColor, baseBg);
+        double Lbg = androidx.core.graphics.ColorUtils.calculateLuminance(compositeBg);
+        double Lwhite = 0.95;
+        double Lblack = 0.015;
+        double ratioWhite = Lbg > Lwhite ? (Lbg + 0.05) / (Lwhite + 0.05) : (Lwhite + 0.05) / (Lbg + 0.05);
+        double ratioBlack = Lbg > Lblack ? (Lbg + 0.05) / (Lblack + 0.05) : (Lblack + 0.05) / (Lbg + 0.05);
+        return ratioWhite > ratioBlack ? 0xFFFAFAFA : 0xFF222222;
+    }
+
     private void setKeyIconColor(Key key, Drawable icon, Keyboard keyboard) {
-        if (key.hasActionKeyBackground()) {
+        if (mKeyCustomBgColors.containsKey(key)) {
+            icon.setColorFilter(getContrastingColor(mKeyCustomBgColors.get(key)), android.graphics.PorterDuff.Mode.SRC_IN);
+        } else if (key.hasActionKeyBackground()) {
             mColors.setColor(icon, ColorType.ACTION_KEY_ICON);
         } else if (key.isShift() && keyboard != null) {
             if (keyboard.mId.mElementId == KeyboardId.ELEMENT_ALPHABET_MANUAL_SHIFTED
@@ -692,7 +794,8 @@ public class KeyboardView extends View {
             mColors.setColor(icon, ColorType.KEY_ICON);
         } else if (this instanceof PopupKeysKeyboardView) {
             if (key.isPressed()) {
-                icon.setColorFilter(Color.BLACK, android.graphics.PorterDuff.Mode.SRC_IN);
+                int pressedBgColor = mColors.getPressedColor(key.hasActionKeyBackground() ? ColorType.ACTION_KEY_POPUP_KEYS_BACKGROUND : ColorType.POPUP_KEYS_BACKGROUND);
+                icon.setColorFilter(getContrastingColor(pressedBgColor), android.graphics.PorterDuff.Mode.SRC_IN);
             } else {
                 mColors.setColor(icon, ColorType.POPUP_KEY_ICON);
             }
@@ -704,5 +807,4 @@ public class KeyboardView extends View {
             mColors.setColor(icon, ColorType.KEY_TEXT);
         }
     }
-
 }

@@ -15,7 +15,7 @@ fun customIconNames(prefs: SharedPreferences) = runCatching {
 fun customIconIds(context: Context, prefs: SharedPreferences) = customIconNames(prefs)
     .mapNotNull { entry ->
         val id = runCatching { context.resources.getIdentifier(entry.value, "drawable", context.packageName) }.getOrNull()
-        id?.let { entry.key to it }
+        if (id != null && id != 0) entry.key to id else null
     }
 
 /** Derive an index from a number of boolean [settingValues], used to access the matching default value in a defaults arraY */
@@ -30,3 +30,20 @@ fun createPrefKeyForBooleanSettings(prefix: String, index: Int, number: Int): St
 
 fun getTransitionAnimationScale(context: Context) =
     Global.getFloat(context.contentResolver, Global.TRANSITION_ANIMATION_SCALE, 1f)
+
+fun getProfileAwarePrefKey(key: String, profile: helium314.keyboard.latin.utils.ScreenProfile): String =
+    "${key}_${profile.name.lowercase()}"
+
+fun getProfileAwareBoolean(prefs: SharedPreferences, key: String, profile: helium314.keyboard.latin.utils.ScreenProfile, defaultValue: Boolean): Boolean {
+    val profileKey = getProfileAwarePrefKey(key, profile)
+    if (prefs.contains(profileKey)) return prefs.getBoolean(profileKey, defaultValue)
+    if (prefs.contains(key)) return prefs.getBoolean(key, defaultValue)
+    return defaultValue
+}
+
+fun getProfileAwareFloat(prefs: SharedPreferences, key: String, profile: helium314.keyboard.latin.utils.ScreenProfile, defaultValue: Float): Float {
+    val profileKey = getProfileAwarePrefKey(key, profile)
+    if (prefs.contains(profileKey)) return prefs.getFloat(profileKey, defaultValue)
+    if (prefs.contains(key)) return prefs.getFloat(key, defaultValue)
+    return defaultValue
+}

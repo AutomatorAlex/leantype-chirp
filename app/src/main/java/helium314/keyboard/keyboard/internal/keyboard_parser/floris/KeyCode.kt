@@ -30,9 +30,9 @@ object KeyCode {
     const val FN =                            -5
     const val FN_LOCK =                       -6
     const val DELETE =                        -7
-    //const val DELETE_WORD =                   -8
-    //const val FORWARD_DELETE =                -9
-    //const val FORWARD_DELETE_WORD =          -10
+    const val DELETE_WORD =                   -8
+    const val FORWARD_DELETE =                -9
+    const val FORWARD_DELETE_WORD =          -10
     const val SHIFT =                        -11
     const val CAPS_LOCK =                    -13
 
@@ -95,6 +95,8 @@ object KeyCode {
     const val URI_COMPONENT_TLD =           -255
 
     const val SETTINGS =                    -301
+    const val TOGGLE_TEXT_EDIT_MODE =       -305
+    const val TOGGLE_SELECTION_MODE =       -306
 
     const val CURRENCY_SLOT_1 =             -801
     const val CURRENCY_SLOT_2 =             -802
@@ -104,6 +106,12 @@ object KeyCode {
     const val CURRENCY_SLOT_6 =             -806
 
     const val MULTIPLE_CODE_POINTS =        -902
+
+    const val CUSTOM1 = -10081
+    const val CUSTOM2 = -10082
+    const val CUSTOM3 = -10083
+    const val CUSTOM4 = -10084
+    const val CUSTOM5 = -10085
     //const val DRAG_MARKER =                 -991
     //const val NOOP =                        -999
 
@@ -127,6 +135,7 @@ object KeyCode {
     const val SYMBOL_ALPHA =              -10001
     const val TOGGLE_ONE_HANDED_MODE =    -10002
     const val TOGGLE_FLOATING_KEYBOARD =  -10072
+    const val TOGGLE_TOUCHPAD_MODE =      -10073
     const val TOGGLE_ONE_HANDED_MODE_2 =  -10003 // does the same as TOGGLE_ONE_HANDED_MODE (used to be start & stop)
     const val SWITCH_ONE_HANDED_MODE =    -10004
     const val SHIFT_ENTER =               -10005
@@ -192,6 +201,9 @@ object KeyCode {
     const val CUSTOM_AI_9 =               -10069
     const val CUSTOM_AI_10 =              -10070
     const val CLIPBOARD_SEARCH =          -10071
+    const val HANDWRITING =               -10074
+    const val CLEAR_HANDWRITING =         -10075
+    const val SWITCH_TO_USER_IME =        -10076
 
 
     // Intents
@@ -203,7 +215,7 @@ object KeyCode {
     fun Int.checkAndConvertCode(): Int = if (this > 0) this else when (this) {
         // working
         CURRENCY_SLOT_1, CURRENCY_SLOT_2, CURRENCY_SLOT_3, CURRENCY_SLOT_4, CURRENCY_SLOT_5, CURRENCY_SLOT_6,
-        VOICE_INPUT, LANGUAGE_SWITCH, SETTINGS, DELETE, ALPHA, SYMBOL, EMOJI, CLIPBOARD, CLIPBOARD_CUT, UNDO,
+        VOICE_INPUT, LANGUAGE_SWITCH, SETTINGS, DELETE, DELETE_WORD, FORWARD_DELETE, FORWARD_DELETE_WORD, ALPHA, SYMBOL, EMOJI, CLIPBOARD, CLIPBOARD_CUT, UNDO,
         REDO, ARROW_DOWN, ARROW_UP, ARROW_RIGHT, ARROW_LEFT, CLIPBOARD_COPY, CLIPBOARD_PASTE, CLIPBOARD_SELECT_ALL,
         CLIPBOARD_SELECT_WORD, TOGGLE_INCOGNITO_MODE, TOGGLE_AUTOCORRECT, MOVE_START_OF_LINE, MOVE_END_OF_LINE,
         MOVE_START_OF_PAGE, MOVE_END_OF_PAGE, SHIFT, CAPS_LOCK, MULTIPLE_CODE_POINTS, UNSPECIFIED, CTRL, ALT,
@@ -217,7 +229,8 @@ object KeyCode {
         TIMESTAMP, CTRL_LEFT, CTRL_RIGHT, ALT_LEFT, ALT_RIGHT, META_LEFT, META_RIGHT, SEND_INTENT_ONE, SEND_INTENT_TWO,
         SEND_INTENT_THREE, INLINE_EMOJI_SEARCH_DONE, META_LOCK, PROOFREAD, TRANSLATE, SHOW_TRANSLATE_LANGUAGES,
         CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, CUSTOM_AI_4, CUSTOM_AI_5,
-        CUSTOM_AI_6, CUSTOM_AI_7, CUSTOM_AI_8, CUSTOM_AI_9, CUSTOM_AI_10, CLIPBOARD_SEARCH, TOGGLE_FLOATING_KEYBOARD
+        CUSTOM_AI_6, CUSTOM_AI_7, CUSTOM_AI_8, CUSTOM_AI_9, CUSTOM_AI_10, CLIPBOARD_SEARCH, TOGGLE_FLOATING_KEYBOARD, TOGGLE_TOUCHPAD_MODE, TOGGLE_TEXT_EDIT_MODE, TOGGLE_SELECTION_MODE, HANDWRITING, CLEAR_HANDWRITING,
+        CUSTOM1, CUSTOM2, CUSTOM3, CUSTOM4, CUSTOM5, SWITCH_TO_USER_IME
         -> this
 
         // conversion

@@ -38,9 +38,25 @@ object Defaults {
         LayoutType.PHONE_SYMBOLS -> "phone_symbols"
         LayoutType.EMOJI_BOTTOM -> "emoji_bottom_row"
         LayoutType.CLIPBOARD_BOTTOM -> "clip_bottom_row"
+        LayoutType.HANDWRITING_BOTTOM -> "handwriting_bottom_row"
+        LayoutType.EDITING -> "editing"
+        LayoutType.CUSTOM1 -> "symbols"
+        LayoutType.CUSTOM2 -> "symbols"
+        LayoutType.CUSTOM3 -> "symbols"
+        LayoutType.CUSTOM4 -> "symbols"
+        LayoutType.CUSTOM5 -> "symbols"
     }
     
     const val PREF_SPLIT_TOOLBAR = false
+    const val PREF_AUTO_SPAN_TOOLBAR_KEYS = true
+    const val PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR = true
+    const val PREF_USE_SYSTEM_EMOJI = false
+
+    const val PREF_ENABLE_SPELL_CHECKER_SERVICE = true
+    const val PREF_ENABLE_CONTACTS_OBSERVER = false
+    const val PREF_ENABLE_CLIPBOARD_LISTENER = true
+    const val PREF_ENABLE_SMS_OTP_RECEIVER = false
+    const val PREF_ENABLE_APP_SYNC_LISTENER = false
 
 
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
@@ -65,6 +81,7 @@ object Defaults {
     @JvmField
     var PREF_POPUP_ON = true
     const val PREF_AUTO_CORRECTION = false
+    const val PREF_AUTO_CORRECT_TRIGGER = "both"
     const val PREF_MORE_AUTO_CORRECTION = false
     const val PREF_AUTO_CORRECT_THRESHOLD = 0.185f
     const val PREF_AUTOCORRECT_SHORTCUTS = true
@@ -78,13 +95,22 @@ object Defaults {
     const val PREF_BLOCK_POTENTIALLY_OFFENSIVE = true
     const val PREF_SHOW_LANGUAGE_SWITCH_KEY = false
     const val PREF_LANGUAGE_SWITCH_KEY = "internal"
+    const val PREF_DIRECT_IME_SWITCH_TARGET = ""
+    const val PREF_APP_LANGUAGE = ""
     const val PREF_SHOW_EMOJI_KEY = false
     const val PREF_VARIABLE_TOOLBAR_DIRECTION = true
+    const val PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD = false
+    const val PREF_PHYSICAL_KEYBOARD_SUGGESTION_SHORTCUTS = "alt"
     const val PREF_ADDITIONAL_SUBTYPES = "de${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwerty${Separators.SETS}" +
             "fr${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwertz${Separators.SETS}" +
             "hu${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwerty"
     const val PREF_ENABLE_SPLIT_KEYBOARD = false
     const val PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE = false
+    const val PREF_PERSIST_FLOATING_KEYBOARD = false
+    // ponytail: persist text edit mode default
+    const val PREF_PERSIST_TEXT_EDIT_MODE = false
+    // ponytail: default value to disable multi-word suggestions is false
+    const val PREF_DISABLE_MULTI_WORD_SUGGESTIONS = false
     @JvmField
     val PREF_SPLIT_SPACER_SCALE = Array(2) { DEFAULT_SIZE_SCALE }
     @JvmField
@@ -101,17 +127,29 @@ object Defaults {
     const val PREF_SPACE_VERTICAL_SWIPE = "touchpad_mode"
     const val PREF_DELETE_SWIPE = true
     const val PREF_AUTOSPACE_AFTER_PUNCTUATION = false
+    const val PREF_AUTOSPACE_AFTER_EMOJI = false
     const val PREF_AUTOSPACE_AFTER_SUGGESTION = true
     const val PREF_AUTOSPACE_AFTER_GESTURE_TYPING = true
     const val PREF_AUTOSPACE_BEFORE_GESTURE_TYPING = true
     const val PREF_SHIFT_REMOVES_AUTOSPACE = false
+    const val PREF_PRESERVE_SPACE_BEFORE_PUNCTUATION = false
     const val PREF_ALWAYS_INCOGNITO_MODE = false
     const val PREF_BIGRAM_PREDICTIONS = true
+    const val PREF_PRIORITIZE_PERSONAL_SUGGESTIONS = false
+    const val PREF_NEXT_WORD_BOOST_LEVEL = "500"
+    const val PREF_NEXT_WORD_STRICT_NGRAM = false
+    const val PREF_IMMEDIATE_AUTO_SPACE = false
+    const val PREF_FIRST_WORD_PREDICTIONS = true
     const val PREF_SUGGEST_PUNCTUATION = false
     const val PREF_SUGGEST_CLIPBOARD_CONTENT = true
     const val PREF_SUGGEST_SCREENSHOTS = false
+    const val PREF_COMPRESS_SCREENSHOTS = true
+    const val PREF_AUTO_READ_OTP = false
     const val PREF_GESTURE_INPUT = true
+    // ponytail: gesture method default value
+    const val PREF_GESTURE_METHOD = "fallback"
     const val PREF_VIBRATION_DURATION_SETTINGS = -1
+    const val PREF_VIBRATION_AMPLITUDE_SETTINGS = -1
     const val PREF_KEYPRESS_SOUND_VOLUME = -0.01f
     const val PREF_KEY_LONGPRESS_TIMEOUT = 300
     const val PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY = true
@@ -133,6 +171,7 @@ object Defaults {
     const val PREF_ONE_HANDED_SCALE = 1f
     const val PREF_SHOW_NUMBER_ROW = false
     const val PREF_SHOW_NUMBER_ROW_IN_SYMBOLS = true
+    const val PREF_COMPACT_NUMBER_ROW_IN_SYMBOLS = true
     const val PREF_LOCALIZED_NUMBER_ROW = true
     const val PREF_SHOW_NUMBER_ROW_HINTS = false
     const val PREF_CUSTOM_CURRENCY_KEY = ""
@@ -145,16 +184,24 @@ object Defaults {
     const val PREF_SPACE_TO_CHANGE_LANG = true
     const val PREF_LANGUAGE_SWIPE_DISTANCE = 5
     const val PREF_TOUCHPAD_SENSITIVITY = 50
+    const val PREF_TOUCHPAD_FULLSCREEN = false
     const val PREF_FORCE_AUTO_CAPS = false
     const val PREF_OFFLINE_TEMP = 0.1f  // Lower for faster, more deterministic proofreading
     const val PREF_OFFLINE_TOP_P = 0.5f  // Lower for faster token sampling
-    const val PREF_OFFLINE_SYSTEM_PROMPT = "Correct the grammar and spelling. Output only the corrected text."
+    const val PREF_OFFLINE_TOP_K = 40
+    const val PREF_OFFLINE_MIN_P = 0.05f
+    const val PREF_OFFLINE_SHOW_THINKING = false
+    const val PREF_OFFLINE_SYSTEM_PROMPT = "Correct the grammar and spelling. Keep the same language as the input. Do not translate. Output only the corrected text."
+    const val PREF_OFFLINE_TRANSLATE_SYSTEM_PROMPT = "Translate the following text to {lang}. Output only the translation, nothing else:\n\n"
     const val PREF_OFFLINE_MAX_TOKENS = 64  // Accurate (64 tokens) default
     const val PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE = "French"
     const val PREF_OFFLINE_KEEP_MODEL_LOADED = false
+    const val PREF_AI_ALLOW_INSECURE_CONNECTIONS = false
     const val PREF_ENABLE_CLIPBOARD_HISTORY = true
     const val PREF_CLIPBOARD_HISTORY_RETENTION_TIME = 15 // minutes
     const val PREF_CLIPBOARD_HISTORY_PINNED_FIRST = true
+    const val PREF_CLIPBOARD_FOLD_PINNED = false
+    const val PREF_CLEAR_CLIPBOARD_ICON = "bin"
     const val PREF_ADD_TO_PERSONAL_DICTIONARY = true
     @JvmField
     val PREF_NAVBAR_COLOR = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
@@ -167,12 +214,14 @@ object Defaults {
     const val PREF_DISABLE_NETWORK = false
     const val PREF_TOOLBAR_MODE = "EXPANDABLE"
     const val PREF_TOOLBAR_HIDING_GLOBAL = true
-    const val PREF_QUICK_PIN_TOOLBAR_KEYS = true
+    const val PREF_QUICK_PIN_TOOLBAR_KEYS = false
+    const val PREF_TOOLBAR_LONG_PRESS_HINT = true
     val PREF_PINNED_TOOLBAR_KEYS = defaultPinnedToolbarPref
     val PREF_TOOLBAR_KEYS = defaultToolbarPref
     const val PREF_AUTO_SHOW_TOOLBAR = false
     const val PREF_AUTO_SHOW_TOOLBAR_ON_SELECT = false
     const val PREF_AUTO_HIDE_TOOLBAR = true
+    const val PREF_TOOLBAR_SWIPE_DOWN_DISMISS = false
     const val PREF_AUTO_HIDE_PINNED_KEYS = true
     const val PREF_REMEMBER_TOOLBAR_STATE = false
     const val PREF_TOOLBAR_EXPANDED = false
@@ -195,4 +244,6 @@ object Defaults {
     const val PREF_USER_MORE_COLORS = 0
     const val PREF_USER_ALL_COLORS = ""
     const val PREF_SAVE_SUBTYPE_PER_APP = false
+    const val PREF_DONT_SHOW_SPONSOR_DIALOG = false
+    const val PREF_LAST_SPONSOR_DIALOG_SHOWN = 0L
 }

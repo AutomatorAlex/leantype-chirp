@@ -2,6 +2,7 @@
 package helium314.keyboard.settings.dialogs
 
 import android.content.Intent
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,9 +31,13 @@ import androidx.compose.ui.unit.em
 import helium314.keyboard.compat.locale
 import helium314.keyboard.latin.dictionary.Dictionary
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.common.LocaleUtils
+import helium314.keyboard.latin.common.LocaleUtils.constructLocale
 import helium314.keyboard.latin.common.LocaleUtils.localizedDisplayName
 import helium314.keyboard.latin.utils.DictionaryInfoUtils
+import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.createDictionaryTextAnnotated
+import helium314.keyboard.latin.utils.DownloadableDictionaryRow
 import helium314.keyboard.settings.DeleteButton
 import helium314.keyboard.settings.ExpandButton
 import helium314.keyboard.settings.Theme
@@ -42,6 +48,10 @@ import java.io.File
 import java.util.Locale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalResources
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun DictionaryDialog(
@@ -49,48 +59,92 @@ fun DictionaryDialog(
     locale: Locale,
 ) {
     val ctx = LocalContext.current
-    val (dictionaries, hasInternal) = getUserAndInternalDictionaries(ctx, locale)
-    val mainDict = dictionaries.firstOrNull { it.name == Dictionary.TYPE_MAIN + "_" + DictionaryInfoUtils.USER_DICTIONARY_SUFFIX }
+    var refreshTrigger by remember { mutableStateOf(0) }
+    val (dictionaries, hasInternal) = remember(refreshTrigger) { getUserAndInternalDictionaries(ctx, locale) }
+    val mainDict = dictionaries.firstOrNull {
+        it.name == Dictionary.TYPE_MAIN + "_" + DictionaryInfoUtils.USER_DICTIONARY_SUFFIX
+                || it.name == DictionaryInfoUtils.MAIN_DICT_FILE_NAME
+    }
     val addonDicts = dictionaries.filterNot { it == mainDict }
     val picker = dictionaryFilePicker(locale)
     ThreeButtonAlertDialog(
         onDismissRequest = onDismissRequest,
         onConfirmed = {},
         confirmButtonText = null,
-        cancelButtonText = stringResource(R.string.dialog_close),
+        cancelButtonText = null,
         title = { Text(locale.localizedDisplayName(LocalResources.current)) },
         content = {
             Column {
-                if (hasInternal) {
-                    val color = if (mainDict == null) MaterialTheme.typography.titleSmall.color
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // for disabled look
-                    val bottomPadding = if (mainDict == null) 12.dp else 0.dp
-                    Text(stringResource(R.string.internal_dictionary_summary),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = bottomPadding),
-                        color = color,
-                        style = MaterialTheme.typography.titleSmall
+                val internalDicts = DictionaryInfoUtils.getAssetsDictionaryList(ctx)
+                val best = internalDicts?.let {
+                    LocaleUtils.getBestMatch(locale, it.toList()) { dict ->
+                        DictionaryInfoUtils.extractLocaleFromAssetsDictionaryFile(dict)
+                    }
+                }
+                // ponytail: normalize key to match format used by DictionaryFactory (lowercase, replace - with _)
+                val internalId = best?.let { "main:" + it.substringAfter("_").substringBefore(".").lowercase().replace("-", "_") }
+                val mainPrefKey = "pref_dict_enabled_" + (internalId ?: "main:${locale.toLanguageTag().lowercase().replace("-", "_")}")
+
+                val prefs = ctx.prefs()
+                var enabled by remember { mutableStateOf(prefs.getBoolean(mainPrefKey, true)) }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { isChecked ->
+                            enabled = isChecked
+                            prefs.edit().putBoolean(mainPrefKey, isChecked).apply()
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.main_dictionary),
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
-                if (mainDict != null)
-                    DictionaryDetails(mainDict)
+
+                if (mainDict != null) {
+                    DictionaryDetails(mainDict) { refreshTrigger++ }
+                }
                 if (addonDicts.isNotEmpty()) {
                     HorizontalDivider()
                     Text(stringResource(R.string.dictionary_category_title),
                         modifier = Modifier.padding(vertical = 12.dp),
                         style = MaterialTheme.typography.titleSmall
                     )
-                    addonDicts.forEach { DictionaryDetails(it) }
+                    addonDicts.forEach { DictionaryDetails(it) { refreshTrigger++ } }
                 }
-                val dictString = createDictionaryTextAnnotated(locale)
-                if (dictString.isNotEmpty()) {
+                val knownDicts = remember {
+                    if (helium314.keyboard.latin.BuildConfig.FLAVOR == "standard" || helium314.keyboard.latin.BuildConfig.FLAVOR == "standardfull") {
+                        helium314.keyboard.latin.utils.getKnownDictionariesForLocale(locale, ctx)
+                    } else emptyList()
+                }
+                if (knownDicts.isNotEmpty()) {
                     HorizontalDivider()
                     Text(stringResource(R.string.dictionary_available),
                         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
                         style = MaterialTheme.typography.titleSmall
                     )
-                    Text(dictString, style = LocalTextStyle.current.merge(lineHeight = 1.8.em))
+                    knownDicts.forEach { (desc, link) ->
+                        DownloadableDictionaryRow(locale, desc, link, refreshTrigger) {
+                            refreshTrigger++
+                        }
+                    }
+                } else {
+                    val dictString = createDictionaryTextAnnotated(locale)
+                    if (dictString.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text(stringResource(R.string.dictionary_available),
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(dictString, style = LocalTextStyle.current.merge(lineHeight = 1.8.em))
+                    }
                 }
             }
         },
@@ -106,23 +160,32 @@ fun DictionaryDialog(
 }
 
 @Composable
-private fun DictionaryDetails(dict: File) {
+private fun DictionaryDetails(dict: File, onDelete: () -> Unit) {
+    val ctx = LocalContext.current
     val header = DictionaryInfoUtils.getDictionaryFileHeaderOrNull(dict) ?: return
     val type = header.mIdString.substringBefore(":")
-    var showDeleteDialog by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
-    val title = if (type != DictionaryInfoUtils.DEFAULT_MAIN_DICT) type
-        else stringResource(R.string.main_dictionary)
+    val title = when (type) {
+        DictionaryInfoUtils.DEFAULT_MAIN_DICT -> stringResource(R.string.main_dictionary)
+        Dictionary.TYPE_EMOJI -> stringResource(R.string.subtype_emoji)
+        else -> type
+    }
+
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-        DeleteButton { showDeleteDialog = true }
+        DeleteButton {
+            dict.delete()
+            dict.parentFile?.name?.constructLocale()?.let { dictLocale ->
+                ctx.prefs().edit().remove("pref_dict_download_link_${type}_${dictLocale}").apply()
+            }
+            onDelete()
+        }
         ExpandButton { showDetails = !showDetails }
     }
-    // default animations look better but make the dialog flash, see also MultiSliderPreference
     AnimatedVisibility(showDetails, enter = fadeIn(), exit = fadeOut()) {
         Text(
             header.info(LocalConfiguration.current.locale()),
@@ -130,14 +193,8 @@ private fun DictionaryDetails(dict: File) {
             modifier = Modifier.padding(start = 10.dp, top = 0.dp, end = 10.dp, bottom = 12.dp)
         )
     }
-    if (showDeleteDialog)
-        ConfirmationDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            confirmButtonText = stringResource(R.string.remove),
-            onConfirmed = { dict.delete() },
-            content = { Text(stringResource(R.string.remove_dictionary_message, type))}
-        )
 }
+
 
 @Preview
 @Composable

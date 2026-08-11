@@ -7,7 +7,9 @@ package helium314.keyboard.latin.dictionary
 
 import android.content.Context
 import helium314.keyboard.latin.common.LocaleUtils
+import helium314.keyboard.latin.common.LocaleUtils.constructLocale
 import helium314.keyboard.latin.utils.DictionaryInfoUtils
+import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.Log
 import java.io.File
 import java.util.LinkedList
@@ -29,13 +31,13 @@ object DictionaryFactory {
         val (extracted, nonExtracted) = getAvailableDictsForLocale(locale, context, useEmojiDict)
         extracted.sortedBy { !it.name.endsWith(DictionaryInfoUtils.USER_DICTIONARY_SUFFIX) }.forEach {
             // we sort to have user dicts first, so they have priority over internal dicts of the same type
-            checkAndAddDictionaryToListIfNewType(it, dictList, locale)
+            checkAndAddDictionaryToListIfNewType(it, dictList, locale, context)
         }
         nonExtracted.forEach { filename ->
             val type = filename.substringBefore("_")
             if (dictList.any { it.mDictType == type }) return@forEach
             val extractedFile = DictionaryInfoUtils.extractAssetsDictionary(filename, locale, context) ?: return@forEach
-            checkAndAddDictionaryToListIfNewType(extractedFile, dictList, locale)
+            checkAndAddDictionaryToListIfNewType(extractedFile, dictList, locale, context)
         }
         return DictionaryCollection(Dictionary.TYPE_MAIN, locale, dictList, FloatArray(dictList.size) { 1f })
     }
@@ -49,6 +51,7 @@ object DictionaryFactory {
             // file name is <type>_<language tag>.dict
             ?.groupBy { it.substringBefore("_") }
             ?.forEach { (dictType, dicts) ->
+                if (!useEmojiDict && dictType == Dictionary.TYPE_EMOJI) return@forEach
                 if (cachedDicts.any { it.name == "$dictType.dict" })
                     return@forEach // dictionary is already extracted (can't be old because of cleanup on upgrade)
                 val bestMatch = LocaleUtils.getBestMatch(locale, dicts) {
@@ -64,7 +67,25 @@ object DictionaryFactory {
      * if [file] cannot be loaded it is deleted
      * if the dictionary type already exists in [dicts], the [file] is skipped
      */
-    private fun checkAndAddDictionaryToListIfNewType(file: File, dicts: MutableList<Dictionary>, locale: Locale) {
+    private fun checkAndAddDictionaryToListIfNewType(file: File, dicts: MutableList<Dictionary>, locale: Locale, context: Context) {
+        val header = DictionaryInfoUtils.getDictionaryFileHeaderOrNull(file)
+        if (header != null) {
+            val prefs = context.prefs()
+            val dictType = header.mIdString.split(":").first()
+            if (dictType == Dictionary.TYPE_MAIN) {
+                val localeTag = locale.toLanguageTag().lowercase().replace("-", "_")
+                val mainPrefKey = "pref_dict_enabled_main:$localeTag"
+                if (!prefs.getBoolean(mainPrefKey, true)) {
+                    Log.i("DictionaryFactory", "skipping disabled main dictionary for locale $locale")
+                    return
+                }
+            } else {
+                if (!prefs.getBoolean("pref_dict_enabled_${header.mIdString}", true)) {
+                    Log.i("DictionaryFactory", "skipping disabled addon dictionary ${header.mIdString}")
+                    return
+                }
+            }
+        }
         val dictionary = getDictionary(file, locale) ?: return
         if (dicts.any { it.mDictType == dictionary.mDictType }) {
             dictionary.close()
@@ -85,8 +106,9 @@ object DictionaryFactory {
             return null
         }
         val dictType = header.mIdString.split(":").first()
+        val dictLocale = header.mLocaleString.constructLocale()
         val readOnlyBinaryDictionary = ReadOnlyBinaryDictionary(
-            file.absolutePath, 0, file.length(), false, locale, dictType
+            file.absolutePath, 0, file.length(), false, dictLocale, dictType
         )
 
         if (readOnlyBinaryDictionary.isValidDictionary) {
