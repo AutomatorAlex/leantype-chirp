@@ -16,11 +16,12 @@ As an open-source, community-funded project, we operate on a very limited budget
 ### 🐛 Stability
 - **Clipboard Crash Synchronization**: Clipboard history crash synchronization already carried in the fork is retained and verified against the synced upstream clipboard refactor (`ClipboardHistoryView`, `ClipboardHistoryManager`, `ClipboardDao`).
 
-## 📦 Downloads (Choose Your Flavor)
+## 📦 Download
 
-| File | Description | Permissions |
-| :--- | :--- | :--- |
-| **`1-LeanType-Chirp_1.0.9-standard-release.apk`** | **Recommended**. Cloud AI + Handwrite + Chirp | Internet |
-| **`1-LeanType-Chirp_1.0.9-standardfull-release.apk`** | **Full**. Cloud AI + Handwrite + Chirp  | Internet |
-| **`2-LeanType-Chirp_1.0.9-offline-release.apk`** | **Privacy Focused**. Offline AI | No Internet |
-| **`3-LeanType-Chirp_1.0.9-offlinelite-release.apk`** | **Minimalist**. Pure FOSS. No AI Integration. | No Internet |
+Download one signed Standard APK:
+
+`1-LeanType-Chirp_1.0.9-standard-release.apk`
+
+Includes Cloud AI, Handwrite, and Chirp. Requires Internet permission.
+
+Android rejects unsigned APKs with `INSTALL_PARSE_FAILED_NO_CERTIFICATES`; release APKs must be signed before installation.

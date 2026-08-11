@@ -1,0 +1,5 @@
+LeanType Chirp v1.0.10
+
+- One signed Standard APK release.
+- Release builds now fail instead of producing unsigned APKs.
+- Standard release workflow publishes one artifact.

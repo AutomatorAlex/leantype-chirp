@@ -8,11 +8,32 @@ plugins {
     kotlin("plugin.compose") version "2.2.21"
 }
 
-// Load keystore properties
+// Release builds require an explicitly configured production keystore. Debug builds retain
+// Android Gradle Plugin's separate debug-signing path.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(keystorePropertiesFile.inputStream())
+if (keystorePropertiesFile.isFile) {
+    keystorePropertiesFile.inputStream().use(keystoreProperties::load)
+}
+val requiredReleaseKeystoreProperties = listOf("keyAlias", "keyPassword", "storeFile", "storePassword")
+val hasReleaseKeystoreProperties = keystorePropertiesFile.isFile &&
+    requiredReleaseKeystoreProperties.all { key ->
+        (keystoreProperties.getProperty(key)?.isNotBlank() == true)
+    }
+val releaseKeystoreFile = if (hasReleaseKeystoreProperties) {
+    rootProject.file(requireNotNull(keystoreProperties.getProperty("storeFile")))
+} else {
+    null
+}
+val hasValidReleaseKeystore = hasReleaseKeystoreProperties && releaseKeystoreFile?.isFile == true
+
+val requestedReleaseBuild = gradle.startParameter.taskNames.any { taskName ->
+    taskName.contains("release", ignoreCase = true)
+}
+if (requestedReleaseBuild && !hasValidReleaseKeystore) {
+    throw GradleException(
+        "Release build requires keystore.properties with keyAlias, keyPassword, storeFile, and storePassword, plus an existing keystore file."
+    )
 }
 
 android {
@@ -22,8 +43,8 @@ android {
         applicationId = "com.leantypechirp.keyboard"
         minSdk = 21
         targetSdk = 35
-        versionCode = 10009
-        versionName = "1.0.9"
+        versionCode = 10010
+        versionName = "1.0.10"
 
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         
@@ -56,12 +77,12 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (hasValidReleaseKeystore) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = requireNotNull(keystoreProperties.getProperty("keyAlias"))
+                keyPassword = requireNotNull(keystoreProperties.getProperty("keyPassword"))
+                storeFile = requireNotNull(releaseKeystoreFile)
+                storePassword = requireNotNull(keystoreProperties.getProperty("storePassword"))
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -75,7 +96,7 @@ android {
             isShrinkResources = true  // Enable resource shrinking to reduce APK size and memory usage
             isDebuggable = false
             isJniDebuggable = false
-            if (keystorePropertiesFile.exists()) {
+            if (hasValidReleaseKeystore) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
@@ -283,7 +304,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// Disable baseline/ART profile tasks to guarantee deterministic reproducible builds
+// Release tasks never fall back to unsigned or debug-signed APKs. `assembleStandardDebug`
+// remains an explicitly non-release option, including for local GrapheneOS installs.
 tasks.configureEach {
     if (name.contains("ArtProfile", ignoreCase = true)) {
         enabled = false
