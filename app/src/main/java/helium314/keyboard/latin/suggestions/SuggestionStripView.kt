@@ -7,6 +7,7 @@ package helium314.keyboard.latin.suggestions
 
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import java.util.Locale
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
@@ -31,7 +32,9 @@ import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
+import com.leanbitlab.leantype.voice.VoiceConstants
 import helium314.keyboard.compat.isDeviceLocked
+import helium314.keyboard.compat.isUserLocked
 import helium314.keyboard.event.HapticEvent
 import helium314.keyboard.keyboard.KeyboardSwitcher
 import helium314.keyboard.keyboard.internal.KeyboardIconsSet
@@ -56,6 +59,7 @@ import helium314.keyboard.latin.utils.createToolbarKey
 import helium314.keyboard.latin.utils.setToolbarButtonActivatedState
 import helium314.keyboard.latin.utils.isRepeatableToolbarKey
 import helium314.keyboard.latin.utils.RepeatableKeyTouchListener
+import helium314.keyboard.latin.utils.ResourceUtils
 import helium314.keyboard.latin.utils.dpToPx
 import helium314.keyboard.latin.utils.getCodeForToolbarKey
 import helium314.keyboard.latin.utils.getCodeForToolbarKeyLongClick
@@ -405,6 +409,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
+        if (isVoiceActive) return
 
         if (isShowingEmojiSuggestions && !helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().isShowingEmojiPalettes) {
             isShowingEmojiSuggestions = false
@@ -445,6 +450,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
+        if (isVoiceActive) return
         if (isShowingEmojiSuggestions && !helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().isShowingEmojiPalettes) {
             isShowingEmojiSuggestions = false
         }
@@ -549,15 +555,148 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
     }
 
+    private var isVoiceActive = false
+    private var voiceVisualizerView: VoiceVisualizerView? = null
+
+    @JvmOverloads
+    fun showVoiceStatus(
+        statusText: String,
+        isProcessing: Boolean,
+        onStop: Runnable? = null,
+        onCancel: Runnable? = null,
+        mode: VoiceVisualizerView.Mode = if (isProcessing) VoiceVisualizerView.Mode.PROCESSING else VoiceVisualizerView.Mode.RECORDING
+    ) {
+        clear()
+        isExternalSuggestionVisible = true
+        isVoiceActive = true
+
+        val colors = Settings.getValues().mColors
+        val accentColor = colors.get(ColorType.GESTURE_TRAIL)
+        val textColor = colors.get(ColorType.KEY_TEXT)
+        val actionColor = if (accentColor != 0) accentColor else textColor
+
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            setPadding(8.dpToPx(resources), 0, 4.dpToPx(resources), 0)
+        }
+
+        // Microphone Icon
+        val micIconView = android.widget.ImageView(context).apply {
+            val micDrawable = KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.VOICE.name.lowercase(Locale.US), context)
+            setImageDrawable(micDrawable)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            val pad = 6.dpToPx(resources)
+            setPadding(pad, pad, pad, pad)
+            layoutParams = LinearLayout.LayoutParams(34.dpToPx(resources), 34.dpToPx(resources))
+            colors.setColor(this, ColorType.TOOL_BAR_KEY)
+        }
+        container.addView(micIconView)
+
+        // Animated Audio Waveform Visualizer
+        val visualizer = VoiceVisualizerView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(28.dpToPx(resources), LayoutParams.MATCH_PARENT).apply {
+                marginStart = 2.dpToPx(resources)
+                marginEnd = 6.dpToPx(resources)
+            }
+            setColor(actionColor)
+            setMode(mode)
+        }
+        voiceVisualizerView = visualizer
+        container.addView(visualizer)
+
+        // Status Text
+        val textView = TextView(context).apply {
+            text = statusText
+            setTextColor(textColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
+                marginStart = 4.dpToPx(resources)
+                marginEnd = 4.dpToPx(resources)
+            }
+        }
+        container.addView(textView)
+
+        // Done / Stop Button (Checkmark)
+        if (!isProcessing && onStop != null) {
+            val doneButton = ImageButton(context, null, R.attr.suggestionWordStyle).apply {
+                val doneIcon = KeyboardIconsSet.instance.getNewDrawable(KeyboardIconsSet.NAME_DONE_KEY, context)
+                setImageDrawable(doneIcon)
+                setBackgroundResource(R.drawable.toolbar_key_background)
+                colors.setColor(background, ColorType.TOOL_BAR_EXPAND_KEY_BACKGROUND)
+                colors.setColor(this, ColorType.TOOL_BAR_KEY)
+                scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+                val pad = 9.dpToPx(resources)
+                setPadding(pad, pad, pad, pad)
+                layoutParams = LinearLayout.LayoutParams(40.dpToPx(resources), LayoutParams.MATCH_PARENT)
+                contentDescription = context.getString(R.string.voice_action_done)
+                setOnClickListener {
+                    AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, this@SuggestionStripView, HapticEvent.KEY_PRESS)
+                    onStop.run()
+                }
+            }
+            container.addView(doneButton)
+        }
+
+        // Close / Cancel Button (X)
+        if (onCancel != null) {
+            val closeButton = ImageButton(context, null, R.attr.suggestionWordStyle).apply {
+                val closeIcon = KeyboardIconsSet.instance.getNewDrawable(ToolbarKey.CLOSE_HISTORY.name.lowercase(Locale.US), context)
+                setImageDrawable(closeIcon)
+                setBackgroundResource(R.drawable.toolbar_key_background)
+                colors.setColor(background, ColorType.TOOL_BAR_EXPAND_KEY_BACKGROUND)
+                colors.setColor(this, ColorType.TOOL_BAR_KEY)
+                scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+                val pad = 9.dpToPx(resources)
+                setPadding(pad, pad, pad, pad)
+                layoutParams = LinearLayout.LayoutParams(40.dpToPx(resources), LayoutParams.MATCH_PARENT)
+                contentDescription = context.getString(R.string.voice_action_cancel)
+                setOnClickListener {
+                    AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, this@SuggestionStripView, HapticEvent.KEY_PRESS)
+                    onCancel.run()
+                }
+            }
+            container.addView(closeButton)
+        }
+
+        suggestionsStrip.addView(container)
+        pinnedKeys.isVisible = false
+        suggestionsStrip.isVisible = true
+        toolbarContainer.isVisible = false
+        updateSplitToolbarState()
+    }
+
+    fun hideVoiceStatus() {
+        if (!isVoiceActive) return
+        isVoiceActive = false
+        isExternalSuggestionVisible = false
+        voiceVisualizerView?.setMode(VoiceVisualizerView.Mode.IDLE)
+        voiceVisualizerView = null
+        clear()
+        setToolbarVisibility(isToolbarManuallyOpen, saveState = false)
+        updateSplitToolbarState()
+    }
+
     // overrides: necessarily public, but not used from outside
 
     override fun onSharedPreferenceChanged(prefs: SharedPreferences, key: String?) {
         setToolbarButtonsActivatedStateOnPrefChange(pinnedKeys, key)
         setToolbarButtonsActivatedStateOnPrefChange(toolbar, key)
+        if (key == VoiceConstants.PREF_VOICE_OFFLINE_ENABLED) {
+            updateVoiceKey()
+        }
         if (key == Settings.PREF_PINNED_TOOLBAR_KEYS 
             || key == Settings.PREF_TOOLBAR_KEYS 
             || key == Settings.PREF_QUICK_PIN_TOOLBAR_KEYS 
             || key == Settings.PREF_AUTO_HIDE_PINNED_KEYS 
+            || key == Settings.PREF_AUTO_SPAN_TOOLBAR_KEYS
+            || key == Settings.PREF_TOOLBAR_KEYS_ALIGNMENT
+            || key == Settings.PREF_CLIPBOARD_KEYS_ALIGNMENT
             || key == Settings.PREF_SPLIT_TOOLBAR
             || key == Settings.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR
             || key == Settings.PREF_CUSTOM_ICON_NAMES
@@ -826,7 +965,8 @@ setToolbarVisibility(isToolbarManuallyOpen, false)
     }
 
     fun updateVoiceKey() {
-        val show = Settings.getValues().mShowsVoiceInputKey || ChirpPreferences(context).isVoiceEnabled()
+        val chirpVoiceEnabled = !isUserLocked(context) && ChirpPreferences(context).isVoiceEnabled()
+        val show = Settings.getValues().mShowsVoiceInputKey || chirpVoiceEnabled
         toolbar.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = show
         pinnedKeys.findViewWithTag<View>(ToolbarKey.VOICE)?.isVisible = show
     }
@@ -1126,24 +1266,54 @@ setToolbarVisibility(isToolbarManuallyOpen, false)
         val count = toolbar.childCount
         if (count == 0) return
         val singleKeyWidth = keyDimension
+
+        val visibleCount = (0 until count).count {
+            val child = toolbar.getChildAt(it)
+            child != null && child.visibility != View.GONE
+        }
+        if (visibleCount == 0) return
+
+        val isSplit = Settings.getValues().mSplitToolbar
+        val hasExpandKey = Settings.getValues().mToolbarMode == ToolbarMode.EXPANDABLE && !isSplit
+        val expandKeyWidth = if (hasExpandKey) {
+            if (toolbarExpandKey.width > 0) toolbarExpandKey.width else keyDimension
+        } else 0
+
+        val pinnedCount = if (!Settings.getValues().mAutoHidePinnedKeys && !isSplit) {
+            getPinnedToolbarKeys(context.prefs()).size
+        } else 0
+        val pinnedWidth = if (pinnedKeys.width > 0) pinnedKeys.width else (pinnedCount * keyDimension)
+
+        val keyboardWidth = ResourceUtils.getKeyboardWidth(context, Settings.getValues())
+        val currentStripWidth = (if (width > 0) width else measuredWidth).takeIf { it > 0 } ?: keyboardWidth
+        val fallbackAvailableWidth = (currentStripWidth - expandKeyWidth - pinnedWidth).coerceAtLeast(0)
+
         val containerWidth = toolbarContainer.width.takeIf { it > 0 }
             ?: toolbarContainer.measuredWidth.takeIf { it > 0 }
-            ?: (width - toolbarExpandKey.width - pinnedKeys.width).takeIf { it > 0 }
-            ?: (measuredWidth - toolbarExpandKey.measuredWidth - pinnedKeys.measuredWidth).takeIf { it > 0 }
-            ?: (resources.displayMetrics.widthPixels - singleKeyWidth * 2)
-        val totalKeysWidth = count * singleKeyWidth
+            ?: fallbackAvailableWidth
 
         val isAutoSpan = Settings.getValues().mAutoSpanToolbarKeys
-        val isSplit = Settings.getValues().mSplitToolbar
         val isToolbarVisible = toolbarContainer.isVisible && (isExpanded || isSplit)
-        val useEqualSpacing = isAutoSpan && isToolbarVisible && containerWidth > 0 && (totalKeysWidth <= containerWidth || isSplit)
+        val minSpannedKeyWidth = (singleKeyWidth * 1.25f).toInt()
+        val canSpan = containerWidth > 0 && (containerWidth / visibleCount >= minSpannedKeyWidth)
+        val useEqualSpacing = isAutoSpan && isToolbarVisible && canSpan
 
-        (toolbar as? LinearLayout)?.gravity = if (useEqualSpacing) Gravity.NO_GRAVITY else Gravity.START
+        val alignmentGravity = when (Settings.getValues().mToolbarKeysAlignment) {
+            "left" -> Gravity.START or Gravity.CENTER_VERTICAL
+            "center" -> Gravity.CENTER
+            else -> Gravity.END or Gravity.CENTER_VERTICAL
+        }
+        (toolbar as? LinearLayout)?.gravity = if (useEqualSpacing) Gravity.NO_GRAVITY else alignmentGravity
+
+        val spannedLayoutParams = LinearLayout.LayoutParams(0, singleKeyWidth, 1f).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        }
 
         for (i in 0 until count) {
             val child = toolbar.getChildAt(i) ?: continue
+            if (child.visibility == View.GONE) continue
             child.layoutParams = if (useEqualSpacing) {
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                spannedLayoutParams
             } else {
                 toolbarKeyLayoutParams
             }
@@ -1185,6 +1355,7 @@ setToolbarVisibility(isToolbarManuallyOpen, false)
      * @param onEmojiClick Callback when an emoji is tapped
      */
     fun setEmojiSuggestions(emojis: List<String>, onEmojiClick: java.util.function.Consumer<String>) {
+        if (isVoiceActive) return
         if (!Settings.getValues().mSplitToolbar) return
         isShowingEmojiSuggestions = true
         suggestionsStrip.removeAllViews()
@@ -1243,6 +1414,7 @@ setToolbarVisibility(isToolbarManuallyOpen, false)
      * @param isDownloading Whether the dictionary is currently downloading
      */
     fun setEmojiDownloadButton(onClick: java.lang.Runnable, isDownloading: Boolean) {
+        if (isVoiceActive) return
         if (!Settings.getValues().mSplitToolbar) return
         isShowingEmojiSuggestions = true
         suggestionsStrip.removeAllViews()

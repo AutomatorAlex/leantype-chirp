@@ -37,6 +37,7 @@ import helium314.keyboard.settings.screens.SecondaryLayoutScreen
 import helium314.keyboard.settings.screens.SubtypeScreen
 import helium314.keyboard.settings.screens.TextCorrectionScreen
 import helium314.keyboard.settings.screens.ToolbarScreen
+import helium314.keyboard.settings.screens.UpdatesScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -71,6 +72,7 @@ fun SettingsNavHost(
     ) {
         composable(SettingsDestination.Settings) {
             MainSettingsScreen(
+                onClickUpdates = { navController.navigate(SettingsDestination.Updates) },
                 onClickAbout = { navController.navigate(SettingsDestination.About) },
                 onClickTextCorrection = { navController.navigate(SettingsDestination.TextCorrection) },
                 onClickPreferences = { navController.navigate(SettingsDestination.Preferences) },
@@ -85,6 +87,9 @@ fun SettingsNavHost(
                 onClickGesture = { navController.navigate(SettingsDestination.GestureTyping) },
                 onClickBack = ::goBack,
             )
+        }
+        composable(SettingsDestination.Updates) {
+            UpdatesScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.About) {
             AboutScreen(onClickBack = ::goBack)
@@ -110,7 +115,8 @@ fun SettingsNavHost(
         composable(SettingsDestination.Libraries) {
             LibrariesHubScreen(
                 onClickBack = ::goBack,
-                onClickDictionaries = { navController.navigate(SettingsDestination.Dictionaries) }
+                onClickDictionaries = { navController.navigate(SettingsDestination.Dictionaries) },
+                onClickOfflineVoice = { navController.navigate(SettingsDestination.OfflineVoice) }
             )
         }
         composable(SettingsDestination.CustomAIKeys) {
@@ -174,6 +180,9 @@ fun SettingsNavHost(
         composable(SettingsDestination.BackgroundServices) {
             helium314.keyboard.settings.screens.BackgroundServicesScreen(onClickBack = ::goBack)
         }
+        composable(SettingsDestination.OfflineVoice) {
+            helium314.keyboard.latin.voice.VoiceSettingsScreen(onClickBack = ::goBack)
+        }
     }
     if (target.value != SettingsDestination.Settings/* && target.value != navController.currentBackStackEntry?.destination?.route*/)
         navController.navigate(route = target.value)
@@ -181,6 +190,7 @@ fun SettingsNavHost(
 
 object SettingsDestination {
     const val Settings = "settings"
+    const val Updates = "updates"
     const val About = "about"
     const val TextCorrection = "text_correction"
     const val Preferences = "preferences"
@@ -205,6 +215,7 @@ object SettingsDestination {
     const val CustomAIKeyConfig = "custom_ai_key_config/"
     const val TextExpander = "text_expander"
     const val BackgroundServices = "background_services"
+    const val OfflineVoice = "offline_voice"
     val navTarget = MutableStateFlow(Settings)
 
     // Use SupervisorJob so a cancellation in one navigation hop

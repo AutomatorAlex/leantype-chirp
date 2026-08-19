@@ -131,6 +131,7 @@ public class SettingsValues {
         public final boolean mQuickPinToolbarKeys;
         public final int mScreenMetrics;
         public final boolean mAddToPersonalDictionary;
+        public final int mAddToPersonalDictThreshold;
         public final boolean mUseContactsDictionary;
         public final boolean mUseAppsDictionary;
         public final boolean mEnableSpellCheckerService;
@@ -147,6 +148,8 @@ public class SettingsValues {
         public final boolean mToolbarHidingGlobal;
         public final boolean mSplitToolbar;
         public final boolean mAutoSpanToolbarKeys;
+        public final String mToolbarKeysAlignment;
+        public final String mClipboardKeysAlignment;
         public final boolean mShowDownloadButtonInToolbar;
         public final boolean mAutoShowToolbar;
         public final boolean mAutoShowToolbarOnSelect;
@@ -224,6 +227,9 @@ public class SettingsValues {
                                 Defaults.PREF_TOOLBAR_HIDING_GLOBAL);
                 mSplitToolbar = prefs.getBoolean(Settings.PREF_SPLIT_TOOLBAR, Defaults.PREF_SPLIT_TOOLBAR);
                 mAutoSpanToolbarKeys = prefs.getBoolean(Settings.PREF_AUTO_SPAN_TOOLBAR_KEYS, Defaults.PREF_AUTO_SPAN_TOOLBAR_KEYS);
+                mToolbarKeysAlignment = prefs.getString(Settings.PREF_TOOLBAR_KEYS_ALIGNMENT,
+                                prefs.getString(Settings.PREF_CLIPBOARD_KEYS_ALIGNMENT, Defaults.PREF_TOOLBAR_KEYS_ALIGNMENT));
+                mClipboardKeysAlignment = mToolbarKeysAlignment;
                 mShowDownloadButtonInToolbar = prefs.getBoolean(Settings.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR,
                                 Defaults.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR);
                 mAutoCap = prefs.getBoolean(Settings.PREF_AUTO_CAP, Defaults.PREF_AUTO_CAP)
@@ -456,6 +462,8 @@ public class SettingsValues {
                 mPopupKeyLabelSources = SubtypeUtilsKt.getPopupKeyLabelSources(selectedSubtype, prefs);
                 mAddToPersonalDictionary = prefs.getBoolean(Settings.PREF_ADD_TO_PERSONAL_DICTIONARY,
                                 Defaults.PREF_ADD_TO_PERSONAL_DICTIONARY);
+                mAddToPersonalDictThreshold = prefs.getInt(Settings.PREF_ADD_TO_PERSONAL_DICT_THRESHOLD,
+                                Defaults.PREF_ADD_TO_PERSONAL_DICT_THRESHOLD);
                 mUseContactsDictionary = SettingsValues.readUseContactsEnabled(prefs, context);
                 mUseAppsDictionary = prefs.getBoolean(Settings.PREF_USE_APPS, Defaults.PREF_USE_APPS);
                 mCustomNavBarColor = prefs.getBoolean(Settings.PREF_NAVBAR_COLOR, Defaults.PREF_NAVBAR_COLOR);

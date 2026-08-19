@@ -200,12 +200,14 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_SUGGEST_SCREENSHOTS = "suggest_screenshots";
     public static final String PREF_COMPRESS_SCREENSHOTS = "compress_screenshots";
     public static final String PREF_AUTO_READ_OTP = "auto_read_otp";
+    public static final String PREF_OTP_ALLOWED_SMS_PACKAGE = "otp_allowed_sms_package";
     public static final String PREF_CLIPBOARD_HISTORY_RETENTION_TIME = "clipboard_history_retention_time";
     public static final String PREF_CLIPBOARD_HISTORY_PINNED_FIRST = "clipboard_history_pinned_first";
     public static final String PREF_CLIPBOARD_FOLD_PINNED = "clipboard_fold_pinned";
     public static final String PREF_CLEAR_CLIPBOARD_ICON = "clear_clipboard_icon";
 
     public static final String PREF_ADD_TO_PERSONAL_DICTIONARY = "add_to_personal_dictionary";
+    public static final String PREF_ADD_TO_PERSONAL_DICT_THRESHOLD = "add_to_personal_dict_threshold";
     public static final String PREF_NAVBAR_COLOR = "navbar_color";
     public static final String PREF_NARROW_KEY_GAPS = "narrow_key_gaps";
     public static final String PREF_NARROW_KEY_GAPS_LEVEL = "narrow_key_gaps_level";
@@ -237,6 +239,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_TOOLBAR_HIDING_GLOBAL = "toolbar_hiding_global";
     public static final String PREF_SPLIT_TOOLBAR = "split_toolbar";
     public static final String PREF_AUTO_SPAN_TOOLBAR_KEYS = "auto_span_toolbar_keys";
+    public static final String PREF_TOOLBAR_KEYS_ALIGNMENT = "toolbar_keys_alignment";
+    public static final String PREF_CLIPBOARD_KEYS_ALIGNMENT = "clipboard_keys_alignment";
     public static final String PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR = "show_download_button_in_toolbar";
 
     // Emoji

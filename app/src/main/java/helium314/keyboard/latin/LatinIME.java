@@ -34,6 +34,9 @@ import android.view.Window;
 import android.view.WindowManager;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InlineSuggestion;
@@ -41,10 +44,24 @@ import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InlineSuggestionsResponse;
 import android.view.inputmethod.InputMethodSubtype;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import android.graphics.drawable.Drawable;
+import helium314.keyboard.keyboard.Key;
+import helium314.keyboard.latin.voice.VoiceInputManager;
+import helium314.keyboard.latin.voice.VoicePluginManager;
+import com.leanbitlab.leantype.voice.VoiceConstants;
+
 import helium314.keyboard.accessibility.AccessibilityUtils;
 import helium314.keyboard.compat.ConfigurationCompatKt;
 import helium314.keyboard.compat.EditorInfoCompatUtils;
 import helium314.keyboard.compat.ImeCompat;
+import helium314.keyboard.compat.IsLockedCompatKt;
 import helium314.keyboard.event.HapticEvent;
 import helium314.keyboard.keyboard.KeyboardActionListener;
 import helium314.keyboard.keyboard.KeyboardActionListenerImpl;
@@ -571,8 +588,24 @@ public class LatinIME extends InputMethodService implements
         Log.i(TAG, "Hardware accelerated drawing: " + mIsHardwareAcceleratedDrawingEnabled);
     }
 
+    private static LatinIME sInstance;
+    private VoicePluginManager mVoicePluginManager;
+    private VoiceInputManager mVoiceInputManager;
+    private VoiceInputManager.VoiceState mLastVoiceState = VoiceInputManager.VoiceState.IDLE;
+
+    @Nullable
+    public static LatinIME getInstance() {
+        return sInstance;
+    }
+
+    @Nullable
+    public VoiceInputManager getVoiceInputManager() {
+        return mVoiceInputManager;
+    }
+
     @Override
     public void onCreate() {
+        sInstance = this;
         mSettings.startListener();
         KeyboardIconsSet.Companion.getInstance().loadIcons(this);
         mRichImm = RichInputMethodManager.getInstance();
@@ -582,17 +615,23 @@ public class LatinIME extends InputMethodService implements
         mDisplayContext = KtxKt.getDisplayContext(this);
         KeyboardSwitcher.init(this);
         mFloatingKeyboardManager = new FloatingKeyboardManager(this, this);
+        mVoicePluginManager = new VoicePluginManager(this);
+        mVoiceInputManager = new VoiceInputManager(this, mVoicePluginManager);
         super.onCreate();
 
         loadSettings();
         mClipboardHistoryManager.onCreate();
         mHandler.onCreate();
-        mChirpVoiceController = new ChirpVoiceController(this);
-        mChirpVoiceController.setStateListener(newState -> {
-            if (mSuggestionStripView != null) {
-                mSuggestionStripView.setVoiceKeyRecording(newState == ChirpVoiceController.State.RECORDING);
-            }
-        });
+        // Chirp preferences contain API keys in credential-protected storage. The
+        // unlock receiver kills this process, so normal initialization resumes after unlock.
+        if (!IsLockedCompatKt.isUserLocked(this)) {
+            mChirpVoiceController = new ChirpVoiceController(this);
+            mChirpVoiceController.setStateListener(newState -> {
+                if (mSuggestionStripView != null) {
+                    mSuggestionStripView.setVoiceKeyRecording(newState == ChirpVoiceController.State.RECORDING);
+                }
+            });
+        }
         // Register to receive ringer mode change.
         final IntentFilter filter = new IntentFilter();
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
@@ -765,6 +804,17 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
+        if (sInstance == this) {
+            sInstance = null;
+        }
+        if (mVoiceInputManager != null) {
+            mVoiceInputManager.release();
+            mVoiceInputManager = null;
+        }
+        if (mVoicePluginManager != null) {
+            mVoicePluginManager.release();
+            mVoicePluginManager = null;
+        }
         mHandler.removeCallbacksAndMessages(null);
         if (mFloatingKeyboardManager != null) {
             mFloatingKeyboardManager.destroy();
@@ -858,6 +908,76 @@ public class LatinIME extends InputMethodService implements
         if (mFloatingKeyboardManager != null && mFloatingKeyboardManager.isFloating()) {
             mFloatingKeyboardManager.onInputViewRecreated(view);
         }
+
+        if (mVoiceInputManager != null) {
+            mVoiceInputManager.setListener(new VoiceInputManager.VoiceInputListener() {
+                @Override
+                public void onStateChanged(@NonNull VoiceInputManager.VoiceState state) {
+                    onVoiceStateChanged(state);
+                }
+
+                @Override
+                public void onError(@NonNull String message) {
+                    Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
+                    onVoiceStateChanged(VoiceInputManager.VoiceState.ERROR);
+                }
+            });
+        }
+    }
+
+    public void onVoiceStateChanged(final VoiceInputManager.VoiceState state) {
+        mHandler.post(() -> {
+            if (state == mLastVoiceState) return;
+            final VoiceInputManager.VoiceState prevState = mLastVoiceState;
+            mLastVoiceState = state;
+
+            if (hasSuggestionStripView()) {
+                switch (state) {
+                    case CONNECTING_PLUGIN:
+                    case STARTING_SESSION:
+                        mSuggestionStripView.showVoiceStatus(
+                                getString(R.string.voice_status_connecting),
+                                false,
+                                () -> { if (mVoiceInputManager != null) mVoiceInputManager.stopVoice(); },
+                                () -> { if (mVoiceInputManager != null) mVoiceInputManager.cancelVoice(); },
+                                helium314.keyboard.latin.suggestions.VoiceVisualizerView.Mode.CONNECTING
+                        );
+                        break;
+                    case RECORDING:
+                        mSuggestionStripView.showVoiceStatus(
+                                getString(R.string.voice_status_listening),
+                                false,
+                                () -> { if (mVoiceInputManager != null) mVoiceInputManager.stopVoice(); },
+                                () -> { if (mVoiceInputManager != null) mVoiceInputManager.cancelVoice(); },
+                                helium314.keyboard.latin.suggestions.VoiceVisualizerView.Mode.RECORDING
+                        );
+                        break;
+                    case PROCESSING_FINAL:
+                        mSuggestionStripView.showVoiceStatus(
+                                getString(R.string.voice_status_processing),
+                                true,
+                                null,
+                                () -> { if (mVoiceInputManager != null) mVoiceInputManager.cancelVoice(); },
+                                helium314.keyboard.latin.suggestions.VoiceVisualizerView.Mode.PROCESSING
+                        );
+                        break;
+                    case IDLE:
+                    case ERROR:
+                    default:
+                        mSuggestionStripView.hideVoiceStatus();
+                        break;
+                }
+            }
+
+            final MainKeyboardView kv = mKeyboardSwitcher != null ? mKeyboardSwitcher.getMainKeyboardView() : null;
+            if (kv != null && kv.getKeyboard() != null) {
+                for (final Key key : kv.getKeyboard().getSortedKeys()) {
+                    if (key.getCode() == KeyCode.VOICE_INPUT) {
+                        kv.invalidateKey(key);
+                    }
+                }
+            }
+        });
     }
 
     /**
@@ -1001,6 +1121,10 @@ public class LatinIME extends InputMethodService implements
     void onStartInputViewInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInputView(editorInfo, restarting);
         helium314.keyboard.latin.utils.ProofreadHelper.preloadModel(this);
+        if (mVoicePluginManager != null && !mVoicePluginManager.isPluginConnected()
+                && DeviceProtectedUtils.getSharedPreferences(this).getBoolean(VoiceConstants.PREF_VOICE_OFFLINE_ENABLED, false)) {
+            mVoicePluginManager.bindIfNeeded();
+        }
 
         mClipboardHistoryManager.onStartInputView();
         mDictionaryFacilitator.onStartInput();
@@ -1226,6 +1350,9 @@ public class LatinIME extends InputMethodService implements
     void onFinishInputViewInternal(final boolean finishingInput) {
         super.onFinishInputView(finishingInput);
         Log.i(TAG, "onFinishInputView");
+        if (mVoiceInputManager != null && mVoiceInputManager.isRecording()) {
+            mVoiceInputManager.stopVoice();
+        }
         mOtpSuggestionManager.stop();
         mClipboardHistoryManager.onFinishInputView();
         cleanupInternalStateForFinishInput();
@@ -1253,6 +1380,10 @@ public class LatinIME extends InputMethodService implements
             final int composingSpanStart, final int composingSpanEnd) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
                 composingSpanStart, composingSpanEnd);
+        if (mVoiceInputManager != null) {
+            mVoiceInputManager.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
+                    composingSpanStart, composingSpanEnd);
+        }
         if (DebugFlags.DEBUG_ENABLED) {
             Log.i(TAG, "onUpdateSelection: oss=" + oldSelStart + ", ose=" + oldSelEnd
                     + ", nss=" + newSelStart + ", nse=" + newSelEnd
@@ -1681,7 +1812,24 @@ public class LatinIME extends InputMethodService implements
                 mChirpVoiceController.toggleRecording();
                 return;
             }
-            mRichImm.switchToShortcutIme(this);
+            final boolean offlineEnabled = helium314.keyboard.latin.utils.KtxKt.prefs(this)
+                    .getBoolean(VoiceConstants.PREF_VOICE_OFFLINE_ENABLED, false);
+            if (offlineEnabled) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    if (mVoiceInputManager != null) {
+                        if (mVoiceInputManager.isRecording()) {
+                            mVoiceInputManager.stopVoice();
+                        } else {
+                            mVoiceInputManager.startVoice();
+                        }
+                    }
+                } else {
+                    Toast.makeText(this, "Microphone permission required for offline voice input. Enable in Settings -> Voice", Toast.LENGTH_LONG).show();
+                }
+            } else {
+                mRichImm.switchToShortcutIme(this);
+            }
             return;
         }
         final InputTransaction completeInputTransaction = mInputLogic.onCodeInput(mSettings.getCurrent(), event,
