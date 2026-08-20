@@ -7,25 +7,73 @@ on:
       - 'v*'
       - 'beta-*'
 
+permissions: {}
 jobs:
   build:
+    # Explicit ubuntu fallback: Blacksmith runner availability is not verifiable for this repository.
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate release tag matches Gradle version
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          set -euo pipefail
+
+          if ! VERSION_NAME="$(awk -F'"' '
+            /^[[:space:]]*versionName[[:space:]]*=/ {
+              matches++
+              if (NF != 3 || $2 == "" || $1 !~ /^[[:space:]]*versionName[[:space:]]*=[[:space:]]*$/ || $3 !~ /^[[:space:]]*$/) {
+                invalid=1
+              }
+              value=$2
+            }
+            END {
+              if (matches != 1 || invalid || value == "") {
+                exit 1
+              }
+              print value
+            }
+          ' app/build.gradle.kts)"; then
+            echo "ERROR: Could not extract exactly one valid versionName from app/build.gradle.kts." >&2
+            exit 1
+          fi
+
+          case "$GITHUB_REF_NAME" in
+            v*)
+              EXPECTED_TAG="v${VERSION_NAME}"
+              ;;
+            beta-*)
+              EXPECTED_TAG="beta-${VERSION_NAME}"
+              ;;
+            *)
+              echo "ERROR: Unsupported release tag '$GITHUB_REF_NAME'; expected v${VERSION_NAME} or beta-${VERSION_NAME}." >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ "$GITHUB_REF_NAME" != "$EXPECTED_TAG" ]]; then
+            echo "ERROR: Release tag '$GITHUB_REF_NAME' does not match Gradle versionName '$VERSION_NAME'; expected '$EXPECTED_TAG'." >&2
+            exit 1
+          fi
+
+          echo "Release tag '$GITHUB_REF_NAME' matches Gradle versionName '$VERSION_NAME'."
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
 
       - name: Install Android NDK
         run: sdkmanager "ndk;28.0.13004108"
@@ -64,16 +112,16 @@ jobs:
         run: python3 docs/scripts/generate_release_notes.py
 
       - name: Upload signed Standard release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: LeanType-Chirp-Standard-Release-APK
-          path: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.10-standard-release.apk
+          path: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.11-standard-release.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
         if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/beta-')
         with:
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           body_path: docs/releasenote/release_notes_temp.md
-          files: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.10-standard-release.apk
+          files: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.11-standard-release.apk
