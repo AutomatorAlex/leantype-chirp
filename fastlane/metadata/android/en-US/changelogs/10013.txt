@@ -1,0 +1,6 @@
+LeanType Chirp v1.0.12
+
+- Synced LeanType keyboard and settings updates.
+- Preserved OpenRouter/Requesty Chirp speech-to-text.
+- Fixed clipboard suggestion and Direct Boot startup crashes.
+- One signed Standard APK release.

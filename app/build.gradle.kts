@@ -44,9 +44,9 @@ android {
         applicationId = "com.leantypechirp.keyboard"
         minSdk = 21
         targetSdk = 35
-        // LeanType Chirp v1.0.11 release; upstream 4.2.4 sync.
-        versionCode = 10012
-        versionName = "1.0.11"
+        // LeanType Chirp v1.0.12 release; upstream 4.2.4 sync.
+        versionCode = 10013
+        versionName = "1.0.12"
 
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         

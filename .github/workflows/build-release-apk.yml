@@ -115,7 +115,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: LeanType-Chirp-Standard-Release-APK
-          path: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.11-standard-release.apk
+          path: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.12-standard-release.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -124,4 +124,4 @@ jobs:
         with:
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           body_path: docs/releasenote/release_notes_temp.md
-          files: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.11-standard-release.apk
+          files: app/build/outputs/apk/standard/release/1-LeanType-Chirp_1.0.12-standard-release.apk
