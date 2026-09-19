@@ -108,7 +108,7 @@ fun SearchSettingsScreen(
                             .fillMaxSize(),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
                     ) {
-                        items(groups, key = { (titleRes, keys) -> titleRes?.toString() ?: keys.firstOrNull() ?: keys.hashCode().toString() }) { (titleRes, keys) ->
+                        items(groups, key = { (titleRes, keys) -> "${titleRes}_${keys.hashCode()}" }) { (titleRes, keys) ->
                             androidx.compose.material3.Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -143,18 +143,13 @@ fun SearchSettingsScreen(
                 }
                 if (key == "add_custom_layout") return@filter false
                 when (helium314.keyboard.latin.BuildConfig.FLAVOR) {
-                    "offlinelite" -> {
+                    "offline" -> {
+                        val isOldAndroid = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O
                         !key.startsWith("gemini") &&
                         !key.startsWith("groq") &&
                         !key.startsWith("huggingface") &&
                         !key.startsWith("ai_provider") &&
-                        !key.startsWith("offline_model_path")
-                    }
-                    "offline" -> {
-                        !key.startsWith("gemini") &&
-                        !key.startsWith("groq") &&
-                        !key.startsWith("huggingface") &&
-                        !key.startsWith("ai_provider")
+                        (!isOldAndroid || (!key.startsWith("offline_model_path") && !key.startsWith("load_offline_ai_plugin") && !key.startsWith("custom_ai_")))
                     }
                     else -> true
                 }

@@ -47,15 +47,10 @@ import helium314.keyboard.settings.SettingsActivity
 import helium314.keyboard.settings.SettingsDestination
 import helium314.keyboard.settings.Theme
 import helium314.keyboard.settings.initPreview
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Scaffold
 import helium314.keyboard.settings.NextScreenIcon
 import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.settings.preferences.Preference
@@ -80,15 +75,11 @@ fun LanguageScreen(
         title = stringResource(R.string.language_and_layouts_title),
         settings = listOf(Settings.PREF_APP_LANGUAGE)
     ) {
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
-        ) { innerPadding ->
-            Column(
-                Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(innerPadding)
-                    .padding(vertical = 8.dp)
-            ) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 8.dp)
+        ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -109,13 +100,18 @@ fun LanguageScreen(
                             onClick = { SettingsDestination.navigateTo(SettingsDestination.Layouts) },
                             icon = R.drawable.ic_ime_switcher
                         ) { NextScreenIcon() }
+                        Preference(
+                            name = stringResource(R.string.dictionary_settings_category),
+                            description = "Manage main, personal, and downloadable dictionaries",
+                            onClick = { SettingsDestination.navigateTo(SettingsDestination.Dictionaries) },
+                            icon = R.drawable.ic_dictionary
+                        ) { NextScreenIcon() }
                         SettingsActivity.settingsContainer[Settings.PREF_APP_LANGUAGE]?.Preference()
                     }
                 }
             }
         }
     }
-}
 
 fun createLanguageSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_APP_LANGUAGE, R.string.app_language_title, R.string.app_language_summary) {
@@ -135,9 +131,7 @@ fun LanguagesListScreen(
     val ctx = LocalContext.current
     val sortedSubtypes by remember { mutableStateOf(getSortedSubtypes(ctx)) }
     val b = (LocalContext.current.getActivity() as? SettingsActivity)?.prefChanged?.collectAsState()
-    if ((b?.value ?: 0) < 0)
-        Log.v("irrelevant", "stupid way to trigger recomposition on preference change")
-    val enabledSubtypes = SubtypeSettings.getEnabledSubtypes()
+    val enabledSubtypes = remember(b?.value) { SubtypeSettings.getEnabledSubtypes().toSet() }
     SearchScreen(
         onClickBack = onClickBack,
         title = {
@@ -194,6 +188,7 @@ private fun SubtypeRow(subtype: InputMethodSubtype, isEnabled: Boolean) {
                     showNoDictDialog = true
                 if (it) SubtypeSettings.addEnabledSubtype(ctx.prefs(), subtype)
                 else SubtypeSettings.removeEnabledSubtype(ctx, subtype)
+                (ctx.getActivity() as? SettingsActivity)?.prefChanged()
             }
         )
         if (showNoDictDialog)

@@ -22,11 +22,17 @@ import java.util.Calendar
 import java.util.Locale
 
 object DebugFlags {
-    @JvmField
     var DEBUG_ENABLED = false
 
+    /**
+     * Logs per-candidate raw/weighted/boosted scores from all dictionary
+     * sources during suggestion computation. Enable ONLY when debugging
+     * dictionary scoring or suggestion ranking regressions.
+     */
+    const val SCORE_AUDIT = false
+
     fun init(context: Context) {
-        DEBUG_ENABLED = context.prefs().getBoolean(DebugSettings.PREF_DEBUG_MODE, Defaults.PREF_DEBUG_MODE)
+        DEBUG_ENABLED = BuildConfig.DEBUG || context.prefs().getBoolean(DebugSettings.PREF_DEBUG_MODE, Defaults.PREF_DEBUG_MODE)
         CrashReportExceptionHandler(context.applicationContext).install()
     }
 }

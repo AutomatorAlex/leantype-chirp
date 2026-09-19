@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
@@ -22,7 +23,14 @@ import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.RichInputMethodManager
 import helium314.keyboard.latin.utils.Log
+import helium314.keyboard.latin.utils.ProofreadService
 import helium314.keyboard.latin.utils.prefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -64,6 +72,11 @@ class VoiceInputManager(
     private var needsCapitalStart = true
     private var sessionEmittedText = ""
 
+    private var isCurrentSessionOnline = false
+    private val onlineAudioBuffer = ByteArrayOutputStream()
+    private var onlineTranscriptionJob: Job? = null
+    private val coroutineScope = CoroutineScope(Dispatchers.Main)
+
     private var listener: VoiceInputListener? = null
 
     fun setListener(listener: VoiceInputListener?) {
@@ -75,7 +88,10 @@ class VoiceInputManager(
     fun isRecording(): Boolean = state == VoiceState.RECORDING || state == VoiceState.STARTING_SESSION
 
     fun canStartVoice(): Boolean {
-        if (!ims.prefs().getBoolean(VoiceConstants.PREF_VOICE_OFFLINE_ENABLED, false)) {
+        val provider = RichInputMethodManager.getInstance().currentVoiceProvider
+        val offlineEnabled = provider == VoiceConstants.VOICE_PROVIDER_OFFLINE
+        val onlineEnabled = provider == VoiceConstants.VOICE_PROVIDER_ONLINE
+        if (!offlineEnabled && !onlineEnabled) {
             Log.w(TAG, "canStartVoice: Voice input not enabled in preferences")
             return false
         }
@@ -106,10 +122,29 @@ class VoiceInputManager(
             return
         }
 
-        try {
-            ims.requestShowSelf(0)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to requestShowSelf", e)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                ims.requestShowSelf(0)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to requestShowSelf", e)
+            }
+        }
+
+        val onlineEnabled = RichInputMethodManager.getInstance().currentVoiceProvider == VoiceConstants.VOICE_PROVIDER_ONLINE
+        if (onlineEnabled) {
+            val service = ProofreadService(ims)
+            val provider = service.getProvider()
+            val hasKey = when (provider) {
+                ProofreadService.AIProvider.GEMINI -> service.hasApiKey()
+                ProofreadService.AIProvider.GROQ -> !service.getGroqToken().isNullOrBlank()
+                ProofreadService.AIProvider.OPENAI -> !service.getHuggingFaceToken().isNullOrBlank()
+            }
+            if (!hasKey) {
+                notifyError("API key for ${provider.name} not configured. Set it in Settings → AI Integration")
+                return
+            }
+            startOnlineVoice()
+            return
         }
 
         val isConnected = pluginManager.isPluginConnected()
@@ -120,6 +155,7 @@ class VoiceInputManager(
         activeSessionId = sessionId
         needsCapitalStart = true
         sessionEmittedText = ""
+        isCurrentSessionOnline = false
 
         if (!isConnected) {
             updateState(VoiceState.CONNECTING_PLUGIN)
@@ -154,6 +190,26 @@ class VoiceInputManager(
         }
     }
 
+    private fun startOnlineVoice() {
+        val sessionId = UUID.randomUUID().toString()
+        activeSessionId = sessionId
+        needsCapitalStart = true
+        sessionEmittedText = ""
+        isCurrentSessionOnline = true
+        synchronized(onlineAudioBuffer) {
+            onlineAudioBuffer.reset()
+        }
+
+        val started = startAudioRecordingThread()
+        if (started) {
+            updateState(VoiceState.RECORDING)
+        } else {
+            notifyError("Failed to start audio recording")
+            cleanupSession()
+            updateState(VoiceState.ERROR)
+        }
+    }
+
     private fun initiateSessionHandshake(sessionId: String) {
         if (state == VoiceState.CONNECTING_PLUGIN) {
             updateState(VoiceState.STARTING_SESSION)
@@ -185,6 +241,9 @@ class VoiceInputManager(
             else -> prefLang
         }
 
+        val threads = ims.prefs().getString(VoiceConstants.PREF_VOICE_CPU_THREADS, "4")?.toIntOrNull() ?: 4
+        val customPrompt = ims.prefs().getString(VoiceConstants.PREF_VOICE_CUSTOM_PROMPT, "")?.trim()?.takeIf { it.isNotEmpty() }
+
         val config = VoiceSessionConfig(
             sessionId = sessionId,
             mode = VoiceConstants.MODE_ACCURATE,
@@ -193,7 +252,9 @@ class VoiceInputManager(
             enablePartial = true,
             maxSegmentMs = 5000,
             hybridTimeoutMs = 0,
-            hybridFallbackToVosk = false
+            hybridFallbackToVosk = false,
+            cpuThreads = threads,
+            customPrompt = customPrompt
         )
 
         val callback = object : IVoiceCallback.Stub() {
@@ -293,9 +354,20 @@ class VoiceInputManager(
     }
 
     private fun startAudioRecordingThread(): Boolean {
+        stopAudioLoop() // Prevent zombie thread overlap on rapid re-entry
         if (ContextCompat.checkSelfPermission(ims, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "startAudioRecordingThread: Missing RECORD_AUDIO permission")
             return false
+        }
+
+        val audioManager = ims.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+        try {
+            if (audioManager?.isMicrophoneMute == true) {
+                Log.w(TAG, "Microphone was muted in AudioManager, unmuting...")
+                audioManager.isMicrophoneMute = false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unmute via AudioManager", e)
         }
 
         val minBufSize = AudioRecord.getMinBufferSize(
@@ -311,38 +383,52 @@ class VoiceInputManager(
         // Multiply by 4 (at least 8192) to prevent hardware buffer overruns during Whisper inference blocks
         val bufferSize = maxOf(minBufSize * 4, FRAME_SIZE_BYTES * 8, 8192)
 
+        val sources = intArrayOf(
+            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.DEFAULT,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION
+        )
         var record: AudioRecord? = null
-        try {
-            record = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to create AudioRecord with VOICE_RECOGNITION, trying MIC", e)
-        }
-
-        if (record == null || record.state != AudioRecord.STATE_INITIALIZED) {
+        for (source in sources) {
             try {
-                record?.release()
-                record = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSize
-                )
+                val candidate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val audioFormat = AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        .build()
+                    val builder = AudioRecord.Builder()
+                        .setAudioSource(source)
+                        .setAudioFormat(audioFormat)
+                        .setBufferSizeInBytes(bufferSize)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        builder.setContext(ims)
+                    }
+                    builder.build()
+                } else {
+                    AudioRecord(
+                        source,
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        bufferSize
+                    )
+                }
+                if (candidate.state == AudioRecord.STATE_INITIALIZED) {
+                    Log.i(TAG, "AudioRecord initialized successfully with source: $source")
+                    record = candidate
+                    break
+                } else {
+                    candidate.release()
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to create AudioRecord with MIC fallback", e)
-                return false
+                Log.w(TAG, "Failed to create AudioRecord with source $source", e)
             }
         }
 
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "AudioRecord failed to initialize (state=${record.state})")
-            record.release()
+        if (record == null || record.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord failed to initialize (state=${record?.state})")
+            record?.release()
             return false
         }
 
@@ -357,11 +443,24 @@ class VoiceInputManager(
         }
 
         isRecording.set(true)
-        val writePfd = audioPipeWriteSide ?: return false
+        val isOnline = isCurrentSessionOnline
+        val writePfd = if (!isOnline) {
+            audioPipeWriteSide ?: return false
+        } else null
 
-        val silenceTimeoutSec = ims.prefs().getString(VoiceConstants.PREF_VOICE_SILENCE_TIMEOUT_SECONDS, "3")?.toIntOrNull() ?: 3
+        val silenceTimeoutSec = ims.prefs().getString(VoiceConstants.PREF_VOICE_SILENCE_TIMEOUT_SECONDS, "5")?.toIntOrNull() ?: 5
         val silenceTimeoutMs = if (silenceTimeoutSec > 0) silenceTimeoutSec * 1000L else 0L
         val initialTimeoutMs = if (silenceTimeoutSec > 0) maxOf(silenceTimeoutSec * 2000L, 6000L) else 0L
+
+        val maxDurationSec = ims.prefs().getString(VoiceConstants.PREF_VOICE_MAX_DURATION_SECONDS, "30")?.toIntOrNull() ?: 30
+        val maxDurationMs = if (maxDurationSec > 0) maxDurationSec * 1000L else 0L
+
+        val sensitivity = ims.prefs().getString(VoiceConstants.PREF_VOICE_MIC_SENSITIVITY, "normal")
+        val speechRmsThreshold = when (sensitivity) {
+            "high" -> 60.0
+            "low" -> 250.0
+            else -> 120.0
+        }
 
         audioThread = Thread({
             val buffer = ByteArray(FRAME_SIZE_BYTES)
@@ -372,13 +471,28 @@ class VoiceInputManager(
             var hasSpoken = false
 
             try {
-                outputStream = FileOutputStream(writePfd.fileDescriptor)
+                if (!isOnline && writePfd != null) {
+                    outputStream = FileOutputStream(writePfd.fileDescriptor)
+                }
                 while (isRecording.get()) {
                     val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     if (read > 0) {
-                        outputStream.write(buffer, 0, read)
-                        outputStream.flush()
+                        if (isOnline) {
+                            synchronized(onlineAudioBuffer) {
+                                onlineAudioBuffer.write(buffer, 0, read)
+                            }
+                        } else {
+                            outputStream?.write(buffer, 0, read)
+                            outputStream?.flush()
+                        }
                         totalBytesWritten += read
+
+                        val now = System.currentTimeMillis()
+                        if (maxDurationMs > 0L && (now - sessionStartTime >= maxDurationMs)) {
+                            Log.i(TAG, "Max recording duration (${maxDurationMs}ms) reached. Stopping voice input.")
+                            mainHandler.post { stopVoice() }
+                            break
+                        }
 
                         if (silenceTimeoutMs > 0L) {
                             var sum = 0.0
@@ -391,8 +505,7 @@ class VoiceInputManager(
                                 i += 2
                             }
                             val rms = if (sampleCount > 0) kotlin.math.sqrt(sum / sampleCount) else 0.0
-                            val now = System.currentTimeMillis()
-                            if (rms > 120.0) {
+                            if (rms > speechRmsThreshold) {
                                 lastSpeechTime = now
                                 hasSpoken = true
                             }
@@ -436,16 +549,80 @@ class VoiceInputManager(
     }
 
     fun stopVoice() {
-        Log.i(TAG, "stopVoice() called, state=$state")
+        Log.i(TAG, "stopVoice() called, state=$state, isOnline=$isCurrentSessionOnline")
         if (state == VoiceState.RECORDING || state == VoiceState.STARTING_SESSION || state == VoiceState.CONNECTING_PLUGIN) {
             updateState(VoiceState.PROCESSING_FINAL)
             stopAudioLoop()
-            pluginManager.stopSession()
+            if (isCurrentSessionOnline) {
+                processOnlineTranscription()
+            } else {
+                pluginManager.stopSession()
+            }
+        }
+    }
+
+    private fun processOnlineTranscription() {
+        val pcmBytes = synchronized(onlineAudioBuffer) {
+            onlineAudioBuffer.toByteArray().also { onlineAudioBuffer.reset() }
+        }
+        val sessionId = activeSessionId
+
+        if (pcmBytes.size < 3200) { // Less than 100ms of audio
+            Log.i(TAG, "Online voice audio too short (${pcmBytes.size} bytes), skipping")
+            cleanupSession()
+            updateState(VoiceState.IDLE)
+            return
+        }
+
+        val wavBytes = AudioUtils.pcmToWav(pcmBytes, SAMPLE_RATE, 1, 16)
+        val prefLang = ims.prefs().getString(VoiceConstants.PREF_VOICE_LANGUAGE, VoiceConstants.VOICE_LANG_FOLLOW_KEYBOARD)
+            ?: VoiceConstants.VOICE_LANG_FOLLOW_KEYBOARD
+        val languageTag = when (prefLang) {
+            VoiceConstants.VOICE_LANG_AUTO -> "auto"
+            VoiceConstants.VOICE_LANG_FOLLOW_KEYBOARD, "" -> {
+                try {
+                    RichInputMethodManager.getInstance().currentSubtypeLocale.toLanguageTag()
+                } catch (_: Exception) {
+                    java.util.Locale.getDefault().toLanguageTag()
+                }
+            }
+            else -> prefLang
+        }
+
+        val service = ProofreadService(ims)
+        onlineTranscriptionJob?.cancel()
+        onlineTranscriptionJob = coroutineScope.launch(Dispatchers.IO) {
+            val result = try {
+                kotlinx.coroutines.withTimeout(25_000L) {
+                    service.transcribeAudio(wavBytes, languageTag)
+                }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                Result.failure(Exception("Transcription timed out (25s)"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            mainHandler.post {
+                if (activeSessionId == sessionId) {
+                    result.onSuccess { transcribedText ->
+                        Log.i(TAG, "Online transcription success: '$transcribedText'")
+                        syncRecognizedText(transcribedText, isFinal = true)
+                        lastPartialText = null
+                        cleanupSession()
+                        updateState(VoiceState.IDLE)
+                    }.onFailure { ex ->
+                        val err = ex.message ?: "Transcription failed"
+                        Log.e(TAG, "Online transcription error: $err", ex)
+                        notifyError(err)
+                        cleanupSession()
+                        updateState(VoiceState.ERROR)
+                    }
+                }
+            }
         }
     }
 
     fun cancelVoice() {
-        Log.i(TAG, "cancelVoice() called, state=$state")
+        Log.i(TAG, "cancelVoice() called, state=$state, isOnline=$isCurrentSessionOnline")
         if (state != VoiceState.IDLE) {
             cleanupSession()
             pluginManager.cancelSession()
@@ -458,26 +635,40 @@ class VoiceInputManager(
         if (!isRecording.getAndSet(false)) return
         Log.i(TAG, "stopAudioLoop() executing")
 
+        // 1. Unblock the blocking native read() call by stopping AudioRecord
         try {
             audioRecord?.stop()
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping AudioRecord", e)
         }
+
+        // 2. Wait for background VoiceAudioThread to fully exit native read() and terminate
+        audioThread?.let { thread ->
+            try {
+                thread.join(1000)
+                // 3. Edge-case guard: if driver hung, skip release to avoid native SIGABRT proxy crash
+                if (thread.isAlive) {
+                    Log.w(TAG, "VoiceAudioThread hung. Skipping release() to avoid native proxy crash.")
+                    audioThread = null
+                    audioRecord = null
+                    closeQuietly(audioPipeWriteSide)
+                    audioPipeWriteSide = null
+                    return
+                }
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                Log.w(TAG, "Interrupted while joining audioThread", e)
+            }
+        }
+        audioThread = null
+
+        // 4. Safe to destroy native proxy ONLY after thread is confirmed dead
         try {
             audioRecord?.release()
         } catch (e: Exception) {
             Log.e(TAG, "Error releasing AudioRecord", e)
         }
         audioRecord = null
-
-        audioThread?.let { thread ->
-            try {
-                thread.join(500)
-            } catch (e: InterruptedException) {
-                Log.w(TAG, "Interrupted while joining audioThread", e)
-            }
-        }
-        audioThread = null
 
         closeQuietly(audioPipeWriteSide)
         audioPipeWriteSide = null
@@ -491,7 +682,13 @@ class VoiceInputManager(
         }
         if (!isRecording.get() && !isFinal) return
 
-        val trimmed = rawText.trim()
+        val isSmartPunctuationEnabled = ims.prefs().getBoolean(VoiceConstants.PREF_VOICE_SMART_PUNCTUATION, true)
+        val processedRaw = if (!isSmartPunctuationEnabled) {
+            rawText.replace(Regex("[,.?!;:]"), "")
+        } else {
+            rawText
+        }
+        val trimmed = processedRaw.trim()
 
         // If onFinal has empty text (e.g. silence timeout fired after audio stream closed),
         // lock whatever text was already emitted during partials and commit a trailing space.
@@ -616,6 +813,12 @@ class VoiceInputManager(
     }
 
     private fun cleanupSession() {
+        onlineTranscriptionJob?.cancel()
+        onlineTranscriptionJob = null
+        synchronized(onlineAudioBuffer) {
+            onlineAudioBuffer.reset()
+        }
+        isCurrentSessionOnline = false
         cancelHandshakeTimeout()
         stopAudioLoop()
         closeQuietly(audioPipeReadSide)
@@ -648,6 +851,7 @@ class VoiceInputManager(
 
     fun release() {
         cancelVoice()
+        coroutineScope.cancel()
         pluginManager.release()
     }
 

@@ -15,16 +15,24 @@ import androidx.core.view.isGone
 import helium314.keyboard.compat.ClipboardManagerCompat
 import helium314.keyboard.event.HapticEvent
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
+import android.graphics.Outline
+import android.view.ViewOutlineProvider
+import helium314.keyboard.latin.utils.dpToPx
 import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.common.isValidNumber
 import helium314.keyboard.latin.database.ClipboardDao
 import helium314.keyboard.latin.databinding.ClipboardSuggestionBinding
+import helium314.keyboard.latin.databinding.ScreenshotSuggestionBinding
+import helium314.keyboard.latin.ocr.OcrPluginLoader
+import helium314.keyboard.latin.ocr.OcrPipeline
+import helium314.keyboard.latin.ocr.ScreenshotHelper
 import helium314.keyboard.latin.utils.InputTypeUtils
 import helium314.keyboard.latin.utils.ToolbarKey
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import kotlin.concurrent.thread
 import helium314.keyboard.latin.utils.ExecutorUtils
 import helium314.keyboard.latin.utils.prefs
@@ -78,9 +86,10 @@ class ClipboardHistoryManager(
         }
         if (latinIME.checkCallingOrSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         try {
-            screenshotObserver = object : ContentObserver(mainHandler) {
+            val observer = object : ContentObserver(mainHandler) {
                 override fun onChange(selfChange: Boolean, uri: Uri?) {
                     super.onChange(selfChange, uri)
+                    if (!latinIME.isInputViewShown) return
                     if (latinIME.mSettings.current.mSuggestScreenshots) {
                         updateLatestScreenshotCache {
                             latinIME.tryShowClipboardSuggestion()
@@ -88,10 +97,11 @@ class ClipboardHistoryManager(
                     }
                 }
             }
+            screenshotObserver = observer
             latinIME.contentResolver.registerContentObserver(
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 true,
-                screenshotObserver!!
+                observer
             )
         } catch (e: Exception) {
             // Ignore observer registration failures
@@ -261,6 +271,20 @@ class ClipboardHistoryManager(
         if (cachedScreenshotInfo != null && cachedScreenshotInfo?.uri?.toString() != lastDismissed) {
             dontShowCurrentSuggestion = false
         }
+        val clipData = try {
+            clipboardManager.primaryClip
+        } catch (e: Exception) {
+            null
+        }
+        val currentText = if (clipData != null && clipData.itemCount > 0) {
+            clipData.getItemAt(0)?.coerceToText(latinIME)?.toString()
+        } else {
+            null
+        }
+        val lastDismissedClipboard = prefs.getString("last_dismissed_clipboard_text", "")
+        if (!currentText.isNullOrEmpty() && currentText != lastDismissedClipboard && currentText != lastPrimaryClipText) {
+            dontShowCurrentSuggestion = false
+        }
         if (latinIME.mSettings.current.mSuggestScreenshots) {
             updateLatestScreenshotCache()
         }
@@ -294,8 +318,8 @@ class ClipboardHistoryManager(
     }
 
     override fun onPrimaryClipChanged() {
-        // Make sure we read clipboard content only if history settings is set
-        if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
+        // Read clipboard content if history or suggestion setting is enabled
+        if (latinIME.mSettings.current.mClipboardHistoryEnabled || latinIME.mSettings.current.mSuggestClipboardContent) {
             // ponytail: ignore duplicate events where clipboard contents didn't actually change
             val clipData = try {
                 clipboardManager.primaryClip
@@ -326,11 +350,22 @@ class ClipboardHistoryManager(
                 lastPrimaryClipText = currentText
                 lastPrimaryClipUri = currentUri
                 lastPrimaryClipTimestamp = currentTimestamp
-
-                ExecutorUtils.getBackgroundExecutor(ExecutorUtils.KEYBOARD).execute { fetchPrimaryClip() }
                 dontShowCurrentSuggestion = false
                 val prefs = latinIME.prefs()
                 prefs.edit().remove("last_dismissed_clipboard_text").apply()
+
+                // Immediately update suggestion strip on UI thread without waiting for background DB I/O
+                mainHandler.post {
+                    if (latinIME.isInputViewShown) {
+                        latinIME.tryShowClipboardSuggestion()
+                    }
+                }
+
+                if (latinIME.mSettings.current.mClipboardHistoryEnabled) {
+                    ExecutorUtils.getBackgroundExecutor(ExecutorUtils.KEYBOARD).execute {
+                        fetchPrimaryClip()
+                    }
+                }
             }
         }
     }
@@ -626,36 +661,72 @@ class ClipboardHistoryManager(
             lastSuggestedScreenshotUri = contentUri.toString()
         }
 
-        val binding = ClipboardSuggestionBinding.inflate(LayoutInflater.from(latinIME), parent, false)
-        val textView = binding.clipboardSuggestionText
-        textView.text = "Screenshot"
-        
+        val ocrEnabled = OcrPluginLoader.hasPlugin(latinIME) && latinIME.prefs().getBoolean(OcrPluginLoader.PREF_OCR_SUGGEST_SCREENSHOT_TEXT, true)
+        val binding = ScreenshotSuggestionBinding.inflate(LayoutInflater.from(latinIME), parent, false)
+        val pasteButton = binding.screenshotPasteButton
+        val thumbnailImage = binding.screenshotThumbnailImage
+        val extractButton = binding.screenshotExtractTextButton
+        val closeButton = binding.screenshotSuggestionClose
+
+        val cornerRadius = 8.dpToPx(latinIME.resources).toFloat()
+        pasteButton.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, cornerRadius)
+            }
+        }
+        pasteButton.clipToOutline = true
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                val thumb = latinIME.contentResolver.loadThumbnail(contentUri, android.util.Size(120, 120), null)
-                
-                val size = Math.min(thumb.width, thumb.height)
-                val x = (thumb.width - size) / 2
-                val y = (thumb.height - size) / 2
-                val croppedThumb = android.graphics.Bitmap.createBitmap(thumb, x, y, size, size)
-                
-                val drawable = android.graphics.drawable.BitmapDrawable(latinIME.resources, croppedThumb)
-                textView.setCompoundDrawablesRelativeWithIntrinsicBounds(drawable, null, null, null)
+                val thumb = latinIME.contentResolver.loadThumbnail(contentUri, android.util.Size(160, 160), null)
+                thumbnailImage.setImageBitmap(thumb)
             } catch (e: Exception) {
                 val clipIcon = latinIME.mKeyboardSwitcher.keyboard?.mIconsSet?.getIconDrawable(ToolbarKey.PASTE.name.lowercase())
-                textView.setCompoundDrawablesRelativeWithIntrinsicBounds(clipIcon, null, null, null)
+                thumbnailImage.setImageDrawable(clipIcon)
             }
         }
 
-        textView.setOnClickListener {
+        if (ocrEnabled) {
+            extractButton.visibility = View.VISIBLE
+            extractButton.setImageResource(R.drawable.ic_ocr_extract)
+
+            extractButton.setOnClickListener {
+                dontShowCurrentSuggestion = true
+                lastSuggestedScreenshotUri = contentUri.toString()
+                AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
+                binding.root.isGone = true
+
+                ExecutorUtils.getBackgroundExecutor(ExecutorUtils.KEYBOARD).execute {
+                    val bitmap = ScreenshotHelper.loadScaledBitmap(latinIME, contentUri)
+                    if (bitmap != null) {
+                        OcrPipeline(latinIME).processImage(
+                            bitmap = bitmap,
+                            onSuccess = { lines ->
+                                latinIME.mKeyboardSwitcher.showOcrResult(lines)
+                            },
+                            onError = { err ->
+                                Toast.makeText(latinIME, err, Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    } else {
+                        mainHandler.post {
+                            Toast.makeText(latinIME, R.string.ocr_screenshot_load_failed, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        } else {
+            extractButton.visibility = View.GONE
+        }
+
+        pasteButton.setOnClickListener {
             dontShowCurrentSuggestion = true
             lastSuggestedScreenshotUri = contentUri.toString()
             latinIME.onImageSelected(contentUri.toString())
             AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, it, HapticEvent.KEY_PRESS)
             binding.root.isGone = true
         }
-        
-        val closeButton = binding.clipboardSuggestionClose
+
         closeButton.setImageDrawable(latinIME.mKeyboardSwitcher.keyboard?.mIconsSet?.getIconDrawable(ToolbarKey.CLOSE_HISTORY.name.lowercase()))
         closeButton.setOnClickListener { 
             val prefs = latinIME.prefs()
@@ -671,10 +742,10 @@ class ClipboardHistoryManager(
         }
 
         val colors = latinIME.mSettings.current.mColors
-        textView.setTextColor(colors.get(ColorType.KEY_TEXT))
-        colors.setColor(closeButton, ColorType.REMOVE_SUGGESTION_ICON)
         colors.setBackground(binding.root, ColorType.CLIPBOARD_SUGGESTION_BACKGROUND)
-        
+        colors.setColor(extractButton, ColorType.REMOVE_SUGGESTION_ICON)
+        colors.setColor(closeButton, ColorType.REMOVE_SUGGESTION_ICON)
+
         return binding.root
     }
 

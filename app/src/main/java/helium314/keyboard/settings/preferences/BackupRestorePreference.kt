@@ -2,7 +2,9 @@
 package helium314.keyboard.settings.preferences
 
 import android.content.Intent
+import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -61,7 +63,6 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import androidx.core.content.edit
 import helium314.keyboard.settings.FeedbackManager
 
 @Composable
@@ -161,11 +162,12 @@ fun BackupRestorePreference(setting: Setting) {
             }
         )
     }
-    if (error != null) {
+    val currentError = error
+    if (currentError != null) {
         InfoDialog(
-            if (error!!.startsWith("b"))
-                stringResource(R.string.backup_error, error!!.drop(1))
-            else stringResource(R.string.restore_error, error!!.drop(1))
+            if (currentError.startsWith("b"))
+                stringResource(R.string.backup_error, currentError.drop(1))
+            else stringResource(R.string.restore_error, currentError.drop(1))
         ) { error = null }
     }
 }
@@ -286,6 +288,8 @@ private fun restoreLauncher(
                         var entry: ZipEntry? = zip.nextEntry
                         val filesDir = ctx.filesDir ?: return@execute
                         val deviceProtectedFilesDir = DeviceProtectedUtils.getFilesDir(ctx)
+                        var preferenceLines: List<String>? = null
+                        var protectedPreferenceLines: List<String>? = null
 
                         // Targeted deletion based on selected categories
                         if (selectedCategories.contains(BackupCategory.LAYOUTS)) {
@@ -339,47 +343,27 @@ private fun restoreLauncher(
                                     FileUtils.copyStreamToNewFile(zip, restoredDb)
                                 }
                             } else if (entry.name == PREFS_FILE_NAME) {
-                                val prefLines = String(zip.readBytes()).split("\n")
-                                val prefs = ctx.prefs()
-                                prefs.edit(commit = true) {
-                                    prefs.all.keys.forEach { key ->
-                                        if (selectedCategories.contains(getCategoryForPrefKey(key))) {
-                                            remove(key)
-                                        }
-                                    }
-                                }
-                                readJsonLinesToSettings(prefLines, prefs, selectedCategories)
+                                preferenceLines = String(zip.readBytes()).split("\n")
                             } else if (entry.name == PROTECTED_PREFS_FILE_NAME) {
-                                val prefLines = String(zip.readBytes()).split("\n")
-                                val protectedPrefs = ctx.protectedPrefs()
-                                protectedPrefs.edit(commit = true) {
-                                    protectedPrefs.all.keys.forEach { key ->
-                                        if (selectedCategories.contains(getCategoryForPrefKey(key))) {
-                                            remove(key)
-                                        }
-                                    }
-                                }
-                                readJsonLinesToSettings(prefLines, protectedPrefs, selectedCategories)
+                                protectedPreferenceLines = String(zip.readBytes()).split("\n")
                             } else {
                                 val auxPrefs = auxiliaryPrefsToBackUp(ctx)[entry.name]
                                 if (auxPrefs != null) {
                                     val cat = getCategoryForFilePath(entry.name)
                                     if (cat == null || selectedCategories.contains(cat)) {
                                         val prefLines = String(zip.readBytes()).split("\n")
-                                        auxPrefs.edit(commit = true) {
-                                            auxPrefs.all.keys.forEach { key ->
-                                                if (selectedCategories.contains(getCategoryForPrefKey(key))) {
-                                                    remove(key)
-                                                }
-                                            }
+                                        check(readJsonLinesToSettings(prefLines, auxPrefs, selectedCategories)) {
+                                            "Could not restore preferences from ${entry.name}"
                                         }
-                                        readJsonLinesToSettings(prefLines, auxPrefs, selectedCategories)
                                     }
                                 }
                             }
                             zip.closeEntry()
                             entry = zip.nextEntry
                         }
+                        restoreMainPreferences(
+                            ctx, preferenceLines, protectedPreferenceLines, selectedCategories
+                        )
                     }
                 }
                 if (selectedCategories.contains(BackupCategory.CLIPBOARD)) {
@@ -412,6 +396,35 @@ private fun restoreLauncher(
     }
 }
 
+internal fun restoreMainPreferences(
+    context: Context,
+    preferenceLines: List<String>?,
+    protectedPreferenceLines: List<String>?,
+    selectedCategories: Set<BackupCategory>
+) {
+    val prefs = context.prefs()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || context.isDeviceProtectedStorage) {
+        if (preferenceLines == null && protectedPreferenceLines == null) return
+        // Both accessors use the same store. Clear once, retaining main-preference priority
+        // over legacy protected values regardless of ZIP entry order.
+        val combined = protectedPreferenceLines.orEmpty() + preferenceLines.orEmpty()
+        check(readJsonLinesToSettings(combined, prefs, selectedCategories)) {
+            "Could not restore preferences"
+        }
+        return
+    }
+    if (preferenceLines != null) {
+        check(readJsonLinesToSettings(preferenceLines, prefs, selectedCategories)) {
+            "Could not restore preferences"
+        }
+    }
+    if (protectedPreferenceLines != null) {
+        check(readJsonLinesToSettings(protectedPreferenceLines, context.protectedPrefs(), selectedCategories)) {
+            "Could not restore protected preferences"
+        }
+    }
+}
+
 @Suppress("UNCHECKED_CAST") // it is checked... but whatever (except string set, because can't check for that))
 private fun settingsToJsonStream(settings: Map<String?, Any?>, out: OutputStream) {
     val booleans = settings.filter { it.key is String && it.value is Boolean } as Map<String, Boolean>
@@ -439,6 +452,7 @@ private fun readJsonLinesToSettings(list: List<String>, prefs: SharedPreferences
     val i = list.iterator()
     val e = prefs.edit()
     try {
+        prefs.all.keys.filter { selectedCategories.contains(getCategoryForPrefKey(it)) }.forEach { e.remove(it) }
         while (i.hasNext()) {
             when (i.next()) {
                 "boolean settings" -> Json.decodeFromString<Map<String, Boolean>>(i.next())
@@ -461,8 +475,7 @@ private fun readJsonLinesToSettings(list: List<String>, prefs: SharedPreferences
                     .forEach { e.putStringSet(it.key, it.value) }
             }
         }
-        e.commit()
-        return true
+        return e.commit()
     } catch (e: Exception) {
         return false
     }
@@ -543,7 +556,8 @@ private fun getCategoryForPrefKey(key: String): BackupCategory {
         "suggest_emojis", "inline_emoji_search", "show_emoji_descriptions",
         "auto_correction", "more_auto_correction", "auto_correct_threshold",
         "autocorrect_shortcuts", "backspace_reverts_autocorrect", "suggest_punctuation",
-        "add_to_personal_dictionary"
+        "add_to_personal_dictionary", "add_to_personal_dict_threshold",
+        "auto_correct_aggressiveness"
     )
     if (dictKeys.contains(key) || key.startsWith("pref_text_expander_")) return BackupCategory.DICTIONARY_HISTORY
     

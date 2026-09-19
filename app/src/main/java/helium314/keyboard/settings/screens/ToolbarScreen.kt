@@ -83,6 +83,7 @@ fun ToolbarScreen(
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_SHOW_TOOLBAR else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_SHOW_TOOLBAR_ON_SELECT else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_HIDE_TOOLBAR else null,
+        if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_SHOW_TOOLBAR_NO_SUGGESTIONS else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE && !isSplitToolbar) Settings.PREF_AUTO_HIDE_PINNED_KEYS else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_REMEMBER_TOOLBAR_STATE else null,
         if (toolbarMode != ToolbarMode.HIDDEN) Settings.PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD else null,
@@ -100,9 +101,13 @@ fun createToolbarSettings(context: Context): List<Setting> {
     val filter = { name: String ->
         val lowerName = name.lowercase()
         when {
-            lowerName.startsWith("custom_ai_") -> BuildConfig.FLAVOR == "standard" || BuildConfig.FLAVOR == "standardfull" || BuildConfig.FLAVOR == "offline"
-            lowerName == "handwriting" -> BuildConfig.FLAVOR == "standardfull"
-            lowerName in listOf("proofread", "translate", "clipboard_search") -> BuildConfig.FLAVOR != "offlinelite"
+            lowerName.startsWith("custom_ai_") || lowerName == "proofread" -> {
+                if (BuildConfig.FLAVOR == "offline") {
+                    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+                } else {
+                    BuildConfig.FLAVOR == "standard" || BuildConfig.FLAVOR == "standardfull"
+                }
+            }
             else -> true
         }
     }
@@ -186,6 +191,10 @@ fun createToolbarSettings(context: Context): List<Setting> {
         {
             SwitchPreference(it, Defaults.PREF_AUTO_HIDE_TOOLBAR)
         },
+        Setting(context, Settings.PREF_AUTO_SHOW_TOOLBAR_NO_SUGGESTIONS, R.string.auto_show_toolbar_no_suggestions, R.string.auto_show_toolbar_no_suggestions_summary)
+        {
+            SwitchPreference(it, Defaults.PREF_AUTO_SHOW_TOOLBAR_NO_SUGGESTIONS)
+        },
         Setting(context, Settings.PREF_AUTO_HIDE_PINNED_KEYS, R.string.auto_hide_pinned_keys, R.string.auto_hide_pinned_keys_summary)
         {
             SwitchPreference(it, Defaults.PREF_AUTO_HIDE_PINNED_KEYS) { _ ->
@@ -227,6 +236,7 @@ fun createToolbarSettings(context: Context): List<Setting> {
                         putBoolean(Settings.PREF_AUTO_SHOW_TOOLBAR, false)
                         putBoolean(Settings.PREF_AUTO_HIDE_TOOLBAR, false)
                         putBoolean(Settings.PREF_AUTO_SHOW_TOOLBAR_ON_SELECT, false)
+                        putBoolean(Settings.PREF_AUTO_SHOW_TOOLBAR_NO_SUGGESTIONS, false)
                         putBoolean(Settings.PREF_QUICK_PIN_TOOLBAR_KEYS, false)
                     }
                 } else {
@@ -241,18 +251,16 @@ fun createToolbarSettings(context: Context): List<Setting> {
                 KeyboardSwitcher.getInstance().setThemeNeedsReload()
             }
         },
-        if (helium314.keyboard.latin.BuildConfig.FLAVOR == "standard" || helium314.keyboard.latin.BuildConfig.FLAVOR == "standardfull") {
-            Setting(
-                context,
-                Settings.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR,
-                R.string.show_download_button_in_toolbar,
-                R.string.show_download_button_in_toolbar_summary
-            ) {
-                SwitchPreference(it, Defaults.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR) {
-                    KeyboardSwitcher.getInstance().setThemeNeedsReload()
-                }
+        Setting(
+            context,
+            Settings.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR,
+            R.string.show_download_button_in_toolbar,
+            R.string.show_download_button_in_toolbar_summary
+        ) {
+            SwitchPreference(it, Defaults.PREF_SHOW_DOWNLOAD_BUTTON_IN_TOOLBAR) {
+                KeyboardSwitcher.getInstance().setThemeNeedsReload()
             }
-        } else null
+        }
     )
 }
 
@@ -261,8 +269,9 @@ fun KeyboardIconsSet.GetIcon(name: String?) {
     val ctx = LocalContext.current
     val drawable = getNewDrawable(name, ctx)
     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-        if (drawable is VectorDrawable)
-            Icon(painterResource(iconIds[name?.lowercase()]!!), name, Modifier.fillMaxSize(0.8f))
+        val iconId = iconIds[name?.lowercase()]
+        if (drawable is VectorDrawable && iconId != null)
+            Icon(painterResource(iconId), name, Modifier.fillMaxSize(0.8f))
         else if (drawable != null) {
             val px = with(LocalDensity.current) { 40.dp.toPx() }.toInt()
             Icon(drawable.toBitmap(px, px).asImageBitmap(), name, Modifier.fillMaxSize(0.8f))

@@ -49,6 +49,7 @@ fun MainSettingsScreen(
     onClickUpdates: () -> Unit,
     onClickAbout: () -> Unit,
     onClickTextCorrection: () -> Unit,
+    onClickSuggestions: () -> Unit,
     onClickPreferences: () -> Unit,
     onClickToolbar: () -> Unit,
     onClickGestureTyping: () -> Unit,
@@ -138,7 +139,7 @@ fun MainSettingsScreen(
                     )
                 ) {
                     Column {
-                        if (BuildConfig.FLAVOR != "offlinelite") {
+                        if (BuildConfig.FLAVOR == "standard" || BuildConfig.FLAVOR == "standardfull") {
                             Preference(
                                 name = stringResource(R.string.settings_screen_ai_integration),
                                 onClick = onClickAIIntegration,
@@ -146,7 +147,7 @@ fun MainSettingsScreen(
                             ) { NextScreenIcon() }
                         }
                         Preference(
-                            name = stringResource(R.string.libraries_hub_title),
+                            name = stringResource(R.string.plugins_title),
                             onClick = onClickLibraries,
                             icon = R.drawable.ic_emoji_objects
                         ) { NextScreenIcon() }
@@ -195,6 +196,11 @@ fun MainSettingsScreen(
                             icon = R.drawable.ic_settings_correction
                         ) { NextScreenIcon() }
                         Preference(
+                            name = stringResource(R.string.settings_screen_suggestions),
+                            onClick = onClickSuggestions,
+                            icon = R.drawable.ic_settings_suggestions
+                        ) { NextScreenIcon() }
+                        Preference(
                             name = stringResource(R.string.text_expander_title),
                             onClick = { helium314.keyboard.settings.SettingsDestination.navigateTo(helium314.keyboard.settings.SettingsDestination.TextExpander) },
                             icon = R.drawable.ic_edit
@@ -240,7 +246,7 @@ private fun PreviewScreen() {
     initPreview(LocalContext.current)
     Theme(previewDark) {
         Surface {
-            MainSettingsScreen({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+            MainSettingsScreen({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         }
     }
 }

@@ -52,6 +52,7 @@ class KeyboardIconsSet private constructor() {
         iconIds = ids
         iconsByName.clear()
         ids.forEach { (name, id) ->
+            if (id == 0) return@forEach
             try {
                 val icon = ContextCompat.getDrawable(context, id) ?: return@forEach
                 icon.setBounds(0, 0, icon.intrinsicWidth, icon.intrinsicHeight)
@@ -69,7 +70,7 @@ class KeyboardIconsSet private constructor() {
 
     /** gets drawable from resources, with mutate (might be necessary to avoid coloring issues...) */
     fun getNewDrawable(name: String?, context: Context): Drawable? = name?.lowercase(Locale.US)?.let { name ->
-        (iconIds[name] ?: iconIds[alternativeNames[name]])?.let { ContextCompat.getDrawable(context, it)?.mutate() }
+        (iconIds[name] ?: iconIds[alternativeNames[name]])?.takeIf { it != 0 }?.let { ContextCompat.getDrawable(context, it)?.mutate() }
     }
 
     companion object {
@@ -183,6 +184,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.SPLIT -> R.drawable.ic_ime_switcher
                     ToolbarKey.PROOFREAD -> R.drawable.ic_proofread
                     ToolbarKey.TRANSLATE -> R.drawable.ic_translate
+                    ToolbarKey.OCR -> R.drawable.ic_ocr
                     ToolbarKey.CUSTOM_AI_1 -> R.drawable.ic_custom_ai_1
                     ToolbarKey.CUSTOM_AI_2 -> R.drawable.ic_custom_ai_2
                     ToolbarKey.CUSTOM_AI_3 -> R.drawable.ic_custom_ai_3
@@ -199,7 +201,7 @@ class KeyboardIconsSet private constructor() {
 
         private val keyboardIconsMaterial by lazy { hashMapOf(
             NAME_SHIFT_KEY to                   R.drawable.sym_keyboard_shift_lxx,
-            NAME_SHIFT_KEY_SHIFTED to           R.drawable.sym_keyboard_shift_lxx,
+            NAME_SHIFT_KEY_SHIFTED to           R.drawable.sym_keyboard_shifted_lxx,
             NAME_SHIFT_KEY_LOCKED to            R.drawable.sym_keyboard_shift_lock_lxx,
             NAME_DELETE_KEY to                  R.drawable.sym_keyboard_delete_lxx,
 //            NAME_SPACE_KEY to                   null,
@@ -262,6 +264,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.SPLIT -> R.drawable.ic_ime_switcher
                     ToolbarKey.PROOFREAD -> R.drawable.ic_proofread
                     ToolbarKey.TRANSLATE -> R.drawable.ic_translate
+                    ToolbarKey.OCR -> R.drawable.ic_ocr
                     ToolbarKey.CUSTOM_AI_1 -> R.drawable.ic_custom_ai_1
                     ToolbarKey.CUSTOM_AI_2 -> R.drawable.ic_custom_ai_2
                     ToolbarKey.CUSTOM_AI_3 -> R.drawable.ic_custom_ai_3
@@ -278,7 +281,7 @@ class KeyboardIconsSet private constructor() {
 
         private val keyboardIconsRounded by lazy { hashMapOf(
             NAME_SHIFT_KEY to                   R.drawable.sym_keyboard_shift_rounded,
-            NAME_SHIFT_KEY_SHIFTED to           R.drawable.sym_keyboard_shift_rounded,
+            NAME_SHIFT_KEY_SHIFTED to           R.drawable.sym_keyboard_shifted_rounded,
             NAME_SHIFT_KEY_LOCKED to            R.drawable.sym_keyboard_shift_lock_rounded,
             NAME_DELETE_KEY to                  R.drawable.sym_keyboard_delete_rounded,
 //            NAME_SPACE_KEY to                   null,
@@ -341,6 +344,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.SPLIT -> R.drawable.ic_ime_switcher
                     ToolbarKey.PROOFREAD -> R.drawable.ic_proofread_rounded
                     ToolbarKey.TRANSLATE -> R.drawable.ic_translate_rounded
+                    ToolbarKey.OCR -> R.drawable.ic_ocr
                     ToolbarKey.CUSTOM_AI_1 -> R.drawable.ic_custom_ai_1
                     ToolbarKey.CUSTOM_AI_2 -> R.drawable.ic_custom_ai_2
                     ToolbarKey.CUSTOM_AI_3 -> R.drawable.ic_custom_ai_3

@@ -67,7 +67,8 @@ class KeyboardState(private val switchActions: SwitchActions) {
     private var mode = Mode.ALPHABET
     private var modeBeforeNumpad = Mode.ALPHABET
     // ponytail: track active custom layout index, 0 means default
-    private var lastCustomIndex = 0
+    var lastCustomIndex = 0
+        private set
     private var isSymbolShifted = false
     private var prevMainKeyboardWasShiftLocked = false
     private var prevSymbolsKeyboardWasShifted = false
@@ -76,8 +77,6 @@ class KeyboardState(private val switchActions: SwitchActions) {
     // For handling double tap.
     private var isInAlphabetUnshiftedFromShifted = false
     private var isInDoubleTapShiftKey = false
-    private var lastShiftPressTime = 0L
-
 
     private val savedKeyboardState = SavedKeyboardState()
 
@@ -251,7 +250,7 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
     }
 
-    private fun setAlphabetKeyboard(autoCapsFlags: Int, recapitalizeMode: RecapitalizeMode?) {
+    fun setAlphabetKeyboard(autoCapsFlags: Int, recapitalizeMode: RecapitalizeMode?) {
         if (DebugFlags.DEBUG_ENABLED) {
             Log.d(TAG, "setAlphabetKeyboard: ${stateToString(autoCapsFlags, recapitalizeMode)}")
         }
@@ -555,9 +554,9 @@ class KeyboardState(private val switchActions: SwitchActions) {
             shiftKeyState.onPress()
             return
         }
-        val now = android.os.SystemClock.uptimeMillis()
-        isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout && (now - lastShiftPressTime > 100)
-        lastShiftPressTime = now
+        // A second tap must have an intervening release boundary; duplicate press events without release are ignored.
+        if (!shiftKeyState.isReleasing) return
+        isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout
         if (isInDoubleTapShiftKey) {
 
             if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {

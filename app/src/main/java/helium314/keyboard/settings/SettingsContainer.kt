@@ -14,12 +14,16 @@ import helium314.keyboard.settings.screens.createAdvancedSettings
 import helium314.keyboard.settings.screens.createAppearanceSettings
 import helium314.keyboard.settings.screens.createBackgroundServicesSettings
 import helium314.keyboard.settings.screens.createCorrectionSettings
+import helium314.keyboard.settings.screens.createSuggestionsSettings
 import helium314.keyboard.settings.screens.createGestureTypingSettings
 import helium314.keyboard.settings.screens.createLanguageSettings
 import helium314.keyboard.settings.screens.createLayoutSettings
+import helium314.keyboard.settings.screens.createOcrSettings
 import helium314.keyboard.settings.screens.createPreferencesSettings
+import helium314.keyboard.settings.screens.createSoundSettings
 import helium314.keyboard.settings.screens.createTextExpanderSettings
 import helium314.keyboard.settings.screens.createToolbarSettings
+import helium314.keyboard.latin.voice.createVoiceSettings
 
 class SettingsContainer(context: Context) {
     private val list = createSettings(context)
@@ -127,12 +131,22 @@ private val modules = listOf(
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_TOOLBAR, SettingsDestination.Toolbar, R.string.settings_screen_toolbar, iconRes = R.drawable.ic_settings_toolbar, provider = ::createToolbarSettings),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_GESTURES, SettingsDestination.GestureTyping, R.string.settings_screen_gesture, iconRes = R.drawable.ic_settings_gesture, provider = ::createGestureTypingSettings),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_TEXT_CORRECTION, SettingsDestination.TextCorrection, R.string.settings_screen_correction, iconRes = R.drawable.ic_settings_correction, provider = ::createCorrectionSettings),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_SUGGESTIONS, SettingsDestination.Suggestions, R.string.settings_screen_suggestions, iconRes = R.drawable.ic_settings_suggestions, provider = ::createSuggestionsSettings),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_AI_INTEGRATION, SettingsDestination.AIIntegration, R.string.settings_screen_ai_integration, iconRes = R.drawable.ic_proofread),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_TEXT_EXPANDER, SettingsDestination.TextExpander, titleString = "Text Expander", iconRes = R.drawable.ic_edit, provider = ::createTextExpanderSettings),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_ADVANCED, SettingsDestination.Advanced, R.string.settings_screen_advanced, iconRes = R.drawable.ic_settings_advanced, provider = ::createAdvancedSettings),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_ABOUT, SettingsDestination.About, R.string.settings_screen_about, iconRes = R.drawable.ic_settings_about, provider = ::createAboutSettings),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_OCR, SettingsDestination.OCR, R.string.ocr_settings_title, iconRes = R.drawable.ic_ocr, provider = ::createOcrSettings),
     SettingsModule(SettingsWithoutKey.SCREEN_NAV_LIBRARIES, SettingsDestination.Libraries, R.string.libraries_hub_title, iconRes = R.drawable.ic_emoji_objects),
-    SettingsModule(SettingsWithoutKey.SCREEN_NAV_BACKGROUND_SERVICES, SettingsDestination.BackgroundServices, titleString = "Background Services", provider = ::createBackgroundServicesSettings)
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_BACKGROUND_SERVICES, SettingsDestination.BackgroundServices, titleString = "Background Services", provider = ::createBackgroundServicesSettings),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_DICTIONARIES, SettingsDestination.Dictionaries, R.string.dictionary_settings_category, iconRes = R.drawable.ic_dictionary),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_PERSONAL_DICTIONARIES, SettingsDestination.PersonalDictionaries, R.string.edit_personal_dictionary, iconRes = R.drawable.ic_dictionary),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_BLOCKED_WORDS, SettingsDestination.BlockedWords, R.string.edit_blocked_words, iconRes = R.drawable.ic_bin),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_SOUND, SettingsDestination.Sound, R.string.sound_packs_title, iconRes = R.drawable.ic_play_arrow, provider = ::createSoundSettings),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_VOICE, SettingsDestination.OfflineVoice, R.string.voice_input_title, iconRes = R.drawable.sym_keyboard_voice_holo, provider = ::createVoiceSettings),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_TRANSLATION, SettingsDestination.Translation, R.string.translation_settings_title, iconRes = R.drawable.ic_translate),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_HANDWRITING, SettingsDestination.Handwriting, R.string.libraries_hub_handwriting_title, iconRes = R.drawable.ic_edit),
+    SettingsModule(SettingsWithoutKey.SCREEN_NAV_UPDATES, SettingsDestination.Updates, R.string.settings_screen_updates, iconRes = R.drawable.ic_settings_updates)
 )
 
 private fun createSettings(context: Context): List<Setting> = buildList {
@@ -154,6 +168,7 @@ object SettingsWithoutKey {
     const val SAVE_LOG = "save_log"
     const val BACKUP_RESTORE = "backup_restore"
     const val PERSIST_FLOATING_KEYBOARD = "persist_floating_keyboard"
+    const val REMEMBER_FLOATING_KEYBOARD = "remember_floating_keyboard"
     const val DEBUG_SETTINGS = "screen_debug"
     const val LOAD_GESTURE_LIB = "load_gesture_library"
     const val BACKGROUND_IMAGE = "background_image"
@@ -166,6 +181,9 @@ object SettingsWithoutKey {
     const val TRANSLATE_GROQ_MODEL = "translate_groq_model"
     const val TRANSLATE_GEMINI_MODEL = "translate_gemini_model"
     const val TRANSLATE_HUGGINGFACE_MODEL = "translate_huggingface_model"
+    const val VOICE_GROQ_MODEL = "voice_groq_model"
+    const val VOICE_GEMINI_MODEL = "voice_gemini_model"
+    const val VOICE_HUGGINGFACE_MODEL = "voice_huggingface_model"
     const val OFFLINE_MODEL_PATH = "offline_model_path"
     const val AI_PROVIDER = "ai_provider"
     const val GROQ_TOKEN = "groq_token"
@@ -181,7 +199,10 @@ object SettingsWithoutKey {
     const val CHIRP_MODEL = "chirp_model"
     const val AI_ALLOW_INSECURE_CONNECTIONS = "ai_allow_insecure_connections"
     const val TRANSLATION_ENGINE = "pref_translation_method"
+    const val LOAD_OFFLINE_AI_PLUGIN = "load_offline_ai_plugin"
     const val BACKGROUND_SERVICES = "background_services"
+    const val CLOUD_AI_MAX_TOKENS = "cloud_ai_max_tokens"
+    const val APP_QUIRKS = "app_quirks"
 
     // Screen Navigation Keys for Settings Search:
     const val SCREEN_NAV_SECONDARY_LAYOUTS = "screen_nav_secondary_layouts"
@@ -192,11 +213,20 @@ object SettingsWithoutKey {
     const val SCREEN_NAV_TOOLBAR = "screen_nav_toolbar"
     const val SCREEN_NAV_GESTURES = "screen_nav_gestures"
     const val SCREEN_NAV_TEXT_CORRECTION = "screen_nav_text_correction"
+    const val SCREEN_NAV_SUGGESTIONS = "screen_nav_suggestions"
     const val SCREEN_NAV_AI_INTEGRATION = "screen_nav_ai_integration"
     const val SCREEN_NAV_TEXT_EXPANDER = "screen_nav_text_expander"
     const val SCREEN_NAV_ADVANCED = "screen_nav_advanced"
     const val SCREEN_NAV_ABOUT = "screen_nav_about"
     const val SCREEN_NAV_LIBRARIES = "screen_nav_libraries"
+    const val SCREEN_NAV_OCR = "screen_nav_ocr"
     const val SCREEN_NAV_DICTIONARIES = "screen_nav_dictionaries"
     const val SCREEN_NAV_BACKGROUND_SERVICES = "screen_nav_background_services"
+    const val SCREEN_NAV_SOUND = "screen_nav_sound"
+    const val SCREEN_NAV_VOICE = "screen_nav_voice"
+    const val SCREEN_NAV_TRANSLATION = "screen_nav_translation"
+    const val SCREEN_NAV_HANDWRITING = "screen_nav_handwriting"
+    const val SCREEN_NAV_UPDATES = "screen_nav_updates"
+    const val SCREEN_NAV_PERSONAL_DICTIONARIES = "screen_nav_personal_dictionaries"
+    const val SCREEN_NAV_BLOCKED_WORDS = "screen_nav_blocked_words"
 }

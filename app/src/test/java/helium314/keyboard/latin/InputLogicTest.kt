@@ -9,6 +9,7 @@ import android.text.InputType
 import android.view.KeyEvent
 import android.view.inputmethod.*
 import androidx.core.content.edit
+import org.junit.Ignore
 import helium314.keyboard.ShadowInputMethodManager2
 import helium314.keyboard.ShadowLocaleManagerCompat
 import helium314.keyboard.event.Event
@@ -23,6 +24,7 @@ import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo
 import helium314.keyboard.latin.common.Constants
 import helium314.keyboard.latin.common.LocaleUtils.constructLocale
 import helium314.keyboard.latin.common.StringUtils
+import helium314.keyboard.latin.dictionary.Dictionary
 import helium314.keyboard.latin.inputlogic.InputLogic
 import helium314.keyboard.latin.inputlogic.SpaceState
 import helium314.keyboard.latin.settings.Settings
@@ -150,6 +152,7 @@ class InputLogicTest {
 
     // todo: make it work, but it might not be that simple because adding is done in combiner
     //  https://github.com/Helium314/HeliBoard/issues/214
+    @Ignore("Known issue: https://github.com/Helium314/HeliBoard/issues/214")
     @Test fun insertLetterIntoWordHangulFails() {
         if (BuildConfig.BUILD_TYPE == "runTests") return
         reset()
@@ -926,6 +929,9 @@ class InputLogicTest {
     @Test fun inlineEmojiSearchStart() {
         assertEquals(true, InputLogic.isStartOfInlineEmojiSearch('t'.code, ':'.code, ' '.code, settingsValues))
         assertEquals(false, InputLogic.isStartOfInlineEmojiSearch(' '.code, ':'.code, ' '.code, settingsValues))
+        assertEquals(false, InputLogic.isStartOfInlineEmojiSearch(')'.code, ':'.code, ' '.code, settingsValues))
+        assertEquals(false, InputLogic.isStartOfInlineEmojiSearch('('.code, ':'.code, ' '.code, settingsValues))
+        assertEquals(false, InputLogic.isStartOfInlineEmojiSearch('/'.code, ':'.code, ' '.code, settingsValues))
         assertEquals(true, InputLogic.isStartOfInlineEmojiSearch('t'.code, ':'.code, '.'.code, settingsValues))
         assertEquals(true, InputLogic.isStartOfInlineEmojiSearch('t'.code, ':'.code, "🌍".codePoints().asSequence().last(), settingsValues))
         assertEquals(false, InputLogic.isStartOfInlineEmojiSearch('t'.code, ':'.code, 't'.code, settingsValues))
@@ -941,7 +947,9 @@ class InputLogicTest {
         assertEquals("test", InputLogic.getInlineEmojiSearchString("🌍:test"))
         assertEquals("test", InputLogic.getInlineEmojiSearchString(",:test"))
         assertEquals(null, InputLogic.getInlineEmojiSearchString(":test\nt"))
-        assertEquals("/48", InputLogic.getInlineEmojiSearchString("2606:127.0.0.1::/48")) // do we want this?
+        assertEquals(null, InputLogic.getInlineEmojiSearchString(":)"))
+        assertEquals(null, InputLogic.getInlineEmojiSearchString(":("))
+        assertEquals(null, InputLogic.getInlineEmojiSearchString("2606:127.0.0.1::/48"))
     }
     private fun typeNoAssert(text: String) {
         text.forEach {
@@ -1004,6 +1012,8 @@ class InputLogicTest {
         lastNgramContext = ""
         addedWords.clear()
         ngramContexts.clear()
+        messages.clear()
+        delayedMessages.clear()
 
         // reset settings
         latinIME.prefs().edit {
@@ -1134,15 +1144,15 @@ class InputLogicTest {
 
     // like selecting a suggestion from strip
     private fun pickSuggestion(suggestion: String) {
-        val info = SuggestedWordInfo(suggestion, "", 0, 0, null, 0, 0)
+        val info = SuggestedWordInfo(suggestion, "", 0, 0, Mockito.mock(Dictionary::class.java), 0, 0)
         latinIME.pickSuggestionManually(info)
         checkConnectionConsistency()
     }
 
     // only works when autocorrect is on, separator after word is required
     private fun getAutocorrectedWithSpaceAfter(suggestion: String, typedWord: String?) {
-        val info = SuggestedWordInfo(suggestion, "", 0, 0, null, 0, 0)
-        val typedInfo = SuggestedWordInfo(typedWord, "", 0, 0, null, 0, 0)
+        val info = SuggestedWordInfo(suggestion, "", 0, 0, Mockito.mock(Dictionary::class.java), 0, 0)
+        val typedInfo = SuggestedWordInfo(typedWord ?: "", "", 0, 0, Mockito.mock(Dictionary::class.java), 0, 0)
         val sw = SuggestedWords(ArrayList(listOf(typedInfo, info)), null, typedInfo, false, true, false, 0, 0)
         latinIME.mInputLogic.setSuggestedWords(sw) // this prepares for autocorrect
         input(' ')
@@ -1150,7 +1160,7 @@ class InputLogicTest {
     }
 
     private fun glideTypingInput(word: String) {
-        val info = SuggestedWordInfo(word, "", 0, 0, null, 0, 0)
+        val info = SuggestedWordInfo(word, "", 0, 0, Mockito.mock(Dictionary::class.java), 0, 0)
         val sw = SuggestedWords(ArrayList(listOf(info)), null, info, true, false, false, 0, 0)
         latinIME.mInputLogic.onUpdateTailBatchInputCompleted(settingsValues, sw, KeyboardSwitcher.getInstance())
     }

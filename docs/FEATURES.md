@@ -32,6 +32,9 @@ LeanType combines a lightweight, privacy-focused keyboard foundation with cuttin
 | 🎨 **[Custom Layout Profiles](#21-custom-layout-profiles)** | Save up to 5 custom layout profiles with persistent slot tracking |
 | 🔄 **[In-App Streaming Self-Updater](#22-in-app-streaming-self-updater)** | Direct GitHub release checks and streaming APK installer |
 | 📦 **[Flavor Architecture & Privacy](#23-flavor-architecture--privacy)** | Breakdown of Standard Full, Standard FOSS, Offline, and Lite |
+| 📷 **[Offline Camera OCR & Screenshot Extraction](#24-offline-camera-ocr--screenshot-extraction)** | In-keyboard camera viewfinder, automated screenshot extraction pill, and advanced formatting cleaners |
+| 🔢 **[Inline Math Calculation Suggestions](#25-inline-math-calculation-suggestions)** | High-precision arithmetic expression evaluator on typing `=` with 1-tap replacement |
+| 🎵 **[Custom Sound Packs & Audio Customization](#26-custom-sound-packs--audio-customization)** | Zero-latency key audio engine, 12+ built-in presets, remote repository catalog, and `.zip` imports |
 
 ---
 
@@ -42,15 +45,18 @@ LeanType combines a lightweight, privacy-focused keyboard foundation with cuttin
 | **Multi-Provider Cloud AI** | Proofread, rewrite, and fix grammar via Gemini, Groq, or OpenAI-compatible custom endpoints. | `AI Integration > Set AI Provider` |
 | **Custom AI Keys** | 10 customizable toolbar keys with prompt templates, hashtags (`#editor`, `#proofread`), and tag capsules. | `AI Integration > Custom Keys` |
 | **Offline Proofreading (GGUF)** | Zero-network, on-device neural proofreading powered by embedded `llama.cpp`. | `Advanced > GGUF Model (.gguf)` |
-| **Dual-Engine Translation** | Translate selected text via Cloud AI or dedicated Translation Plugin with auto-fallback. | `AI Integration / Text correction > Translation method` |
+| **Multi-Mode In-Keyboard Translation** | Translate text on-device (Offline ML Kit), via Translation Plugin, or Cloud/Local AI with auto-fallback. | `Translation > Translation Mode` |
 | **Whisper Voice Typing** | On-device speech-to-text with quantized multilingual Whisper models and audio visualizer. | `Voice typing > Whisper Speech Models` |
-| **Handwriting Recognition** | Draw characters on a dedicated canvas with independent language selection (Standard Full flavor). | `Libraries > Handwriting Input Plugin` |
+| **Handwriting Recognition** | Draw characters on a dedicated canvas with in-app model manager (Standard Full flavor). | `Handwriting > Handwriting recognition` |
+| **Offline Camera & Screenshot OCR** | Live in-keyboard camera scanner and screenshot suggestion pill with rich text cleaners (casing, join styles, dehyphenation). | `OCR & Text Extraction` / `Plugins > OCR` |
+| **Inline Math Calculation** | Instant arithmetic calculation suggestions on typing `=` with 1-tap expression replacement. | `Text correction > Inline math calculation` |
+| **Custom Sound Packs** | Zero-latency key audio engine with 12+ built-in presets, remote catalog downloads, and `.zip` import. | `Plugins > Sound` / `Preferences > Sound on keypress` |
 | **Text Editing Panel** | Precision DPAD arrow navigation, Shift selection mode, and clipboard shortcuts. | Toolbar > Text Editing Icon |
 | **Auto-Spanning Toolbar** | Dynamically expands and balances toolbar keys symmetrically across device widths. | `Appearance > Toolbar auto-spacing` |
 | **Touchpad Mode** | Swipe up on Spacebar to activate full cursor control and laptop-style touchpad gestures. | `Gesture typing > Vertical spacebar swipe` |
 | **Floating Keyboard** | Detach keyboard into a draggable, resizable window with persistent positioning. | Toolbar > Floating Keyboard |
 | **Split Toolbar & Suggestions** | Separates suggestions from the toolbar into a dual-row view. | `Appearance > Split toolbar & suggestions` |
-| **Text Expander** | Expand custom shortcuts using dynamic placeholders (`%date%`, `%time%`, `%clipboard%`, `%cursor%`). | `Text correction > Text Expander` |
+| **Versatile Text Expander** | Expand shortcuts with dynamic variables, citation stripper (`%clipboard:clean%`), and modifiers. | `Text correction > Text Expander` |
 | **Clipboard History & Inline Edit** | Search history, swipe-right to edit inline, swipe-left to delete with undo, fold pinned clips, and slide-select. | Clipboard Toolbar > Search / Swipe items |
 | **Screenshot Suggestions** | Instant 1-tap sharing of recently taken screenshots via the suggestion strip. | `Text correction > Suggest recent screenshots` |
 | **Emoji Search** | Search emojis by name/keyword directly from the emoji palette. | `Emoji Key > Search Icon` |
@@ -114,69 +120,75 @@ Include these hashtags in your custom prompts to enforce strict system roles:
 ## 3. Offline Neural Proofreading (GGUF)
 
 > [!IMPORTANT]
-> **Zero-Network Guarantee**: This feature runs 100% locally via embedded `llama.cpp` and is available in the **Offline** build flavor (`-offline-release.apk`). No internet permission exists in the manifest.
+> **Zero-Network Guarantee**: This feature runs 100% locally via the companion [**LeanType Offline AI Plugin**](https://github.com/LeanBitLab/LeanType-Offline-AI-Plugin) powered by `llama.cpp` and is available in the **Offline** build flavor (`-offline-release.apk`). No internet permission exists in the manifest.
 
 ### Setup Instructions
-1. Download a compact GGUF model:
+1. Download `ai_plugin-arm64-v8a.apk` (or `ai_plugin-x86_64.apk`) from the [LeanType Offline AI Plugin Releases](https://github.com/LeanBitLab/LeanType-Offline-AI-Plugin/releases/latest).
+2. In LeanType, open **Settings → Plugins → Offline AI** and tap **Load Offline AI plugin** to load the `.apk`.
+3. Download a compact GGUF model:
    - **Qwen 2.5 0.5B Instruct (Q4_K_M)**: Extremely lightweight & fast (~350 MB).
    - **Llama 3.2 1B Instruct (Q4_K_M)**: High-quality compact reasoning (~900 MB).
    - **Qwen 2.5 1.5B Instruct (Q4_K_M)**: High intelligence for modern devices (~1.1 GB).
-2. Open **Settings → Advanced → GGUF Model (.gguf)** and select the `.gguf` file from your storage.
-3. Configure sampling temperature, Top-K, Top-P, and custom system instructions.
+4. Open **Settings → Advanced → GGUF Model (.gguf)** and select the `.gguf` file from your storage.
+5. Configure sampling temperature, Top-K, Top-P, and custom system instructions.
 
 ---
 
-## 4. Dual-Engine In-Keyboard Translation
+## 4. Multi-Mode In-Keyboard Translation
 
-LeanType offers a flexible translation architecture allowing you to toggle between:
-1. **AI Provider Translation**: Uses Gemini, Groq, OpenAI, or local GGUF models with customizable prompts.
-2. **Translation Plugin (Google / ML Kit)**: Instant, on-device translation engine powered by the [LeanType Translation Plugin](https://github.com/LeanBitLab/LeanType-Translation-Plugin).
-3. **Auto Mode**: Prefers the fast Translation Plugin, with seamless automatic fallback to your configured AI provider.
+LeanType offers a flexible translation architecture supporting all app flavors:
+
+1. **Translation Plugin** (Supported across all flavors):
+   - High-speed, private translation powered by the companion [LeanType Translation Plugin](https://github.com/LeanBitLab/LeanType-Translation-Plugin/releases/latest).
+   - In-app model downloads for online builds, and browser download + local file importing for offline builds.
+2. **Built-in Offline Translation (ML Kit)**:
+   - 100% On-Device & Private translation on supported builds.
+   - Download 59+ language translation models directly inside keyboard settings (~30 MB per language pack).
+3. **Cloud & Local AI Translation**:
+   - Uses your configured **AI Provider** (Google Gemini, Groq, OpenAI, Ollama, or local GGUF models) with customizable translation prompts.
 
 ### How to Setup
-1. In LeanType, open **Settings → Text correction / AI Integration → Translation method**.
-2. Select **Auto**, **Translation Plugin**, or **AI Provider**.
-3. If using the plugin, tap **Download Plugin** to install the companion APK.
-4. Tap the **Translate** icon on the toolbar to translate selected text or entire input fields.
+1. **Online Flavors (`Standard` / `Standard Full`)**: Open **Settings → Translation** and tap **Download Plugin** to install the [LeanType Translation Plugin](https://github.com/LeanBitLab/LeanType-Translation-Plugin/releases/latest) automatically.
+2. **Offline Flavors (`Offline` / `Offline Lite`)**: Download `translation_plugin-arm64-v8a.apk` from [GitHub Releases](https://github.com/LeanBitLab/LeanType-Translation-Plugin/releases/latest) and load it in **Settings → Plugins → Translation**.
+3. Download or import your required source and target language pairs.
+4. Tap the **Translate** icon on the keyboard toolbar to instantly translate selected text or entire input fields.
 
 ---
 
 ## 5. On-Device Whisper Voice Typing
 
-LeanType integrates high-accuracy, private speech-to-text powered by OpenAI's Whisper architecture via `whisper.cpp` and the [LeanType Voice Plugin](https://github.com/LeanBitLab/Leantype-Voice-Plugin).
+LeanType integrates high-accuracy, private speech-to-text powered by OpenAI's Whisper architecture via `whisper.cpp` and the [LeanType Voice Plugin](https://github.com/LeanBitLab/LeanType-Voice-Plugin).
 
 ### Available Multilingual Whisper Models
-- **Tiny** (`ggml-tiny-q5_1.bin`): **~32 MB** — Ultra-fast, minimal memory usage, 99+ languages.
-- **Base** (`ggml-base-q5_1.bin`): **~57 MB** — Best balance of accuracy and speed for daily typing.
-- **Small** (`ggml-small-q5_1.bin`): **~182 MB** — High accuracy for complex vocabulary and accents.
+- **Tiny** (`ggml-tiny.bin`): **~39 MB** — Ultra-fast, minimal memory usage, 99+ languages.
+- **Base** (`ggml-base.bin`): **~74 MB** — Best balance of accuracy and speed for daily typing.
+- **Small** (`ggml-small.bin`): **~244 MB** — High accuracy for complex vocabulary and accents.
 - **Custom Model**: Import any standard `.bin` GGML Whisper model from device storage.
 
 ### Setup Instructions
-1. Install the companion [LeanType Voice Plugin](https://github.com/LeanBitLab/Leantype-Voice-Plugin/releases/latest).
-2. Open **Settings → Voice typing → Whisper Speech Models**.
-3. Tap **Download** on your preferred model (e.g. *Multilingual Base* ~57 MB).
-4. Configure voice options:
+1. Download and install the [LeanType Voice Plugin APK](https://github.com/LeanBitLab/LeanType-Voice-Plugin/releases/latest) on your Android device (installed as a background IPC service).
+2. Grant **Microphone permission** to the LeanType Voice Plugin.
+3. In LeanType, open **Settings → Voice typing** (or **Settings → Plugins → Voice**) and tap **Whisper Speech Models**.
+4. Download or import your preferred model (e.g. *Multilingual Base* ~74 MB).
+5. Configure voice options:
    - **Voice Recognition Language**: Choose **Follow keyboard language (Default)**, **Auto-detect spoken language (`auto`)**, or pick from 99+ specific Whisper languages.
    - **Audio Visualizer**: Displays a real-time sound waveform directly on the keyboard toolbar.
    - **Silence Detection**: Configurable auto-stop sensitivity slider.
    - **Keep Model in Memory**: Prevents model reload latency during consecutive voice typing sessions.
-5. Tap the **Microphone** icon on the toolbar to start voice typing.
+6. Tap the **Microphone** icon on the toolbar to start voice typing.
 
 ---
 
 ## 6. Handwriting Input
 
-> [!NOTE]
-> Available in the **Standard Full** (`-standardfull-release.apk`) build flavor.
-
-Draw letters, words, or symbols directly on a handwriting recognition canvas using your finger or stylus.
+Draw letters, words, or symbols directly on a handwriting recognition canvas using your finger or stylus via the companion [LeanType Handwriting Plugin](https://github.com/LeanBitLab/Leantype-Handwriting-Plugin) (supported across all flavors).
 
 ### Setup Instructions
-1. Open **Settings → Libraries → Handwriting Input Plugin**.
-2. Tap **Download** to install the companion [LeanType Handwriting Plugin](https://github.com/LeanBitLab/Leantype-Handwriting-Plugin).
-3. Select your preferred **Handwriting recognition language** (e.g. English, Chinese, Devanagari, Japanese, etc.), independent of your active keyboard typing language.
-4. Tap the **Handwriting (Pencil)** icon on the keyboard toolbar to open the drawing canvas.
-5. Draw characters naturally—the handwriting engine transcribes strokes into text in real-time.
+1. **Online Flavors**: Open **Settings → Handwriting** and tap **Download Plugin** to install the [LeanType Handwriting Plugin](https://github.com/LeanBitLab/Leantype-Handwriting-Plugin/releases/latest).
+2. **Offline Flavors**: Download `handwriting_plugin-arm64-v8a.apk` from [GitHub Releases](https://github.com/LeanBitLab/Leantype-Handwriting-Plugin/releases/latest) and load it in **Settings → Plugins → Handwriting**.
+3. Use the **Offline Handwriting Models** dialog to download recognition packs directly (or import downloaded `.zip` model packs on offline builds).
+4. Customize stroke width, stroke fade timeout, and recognition sensitivity.
+5. Tap the **Handwriting (Pencil)** icon on the keyboard toolbar to open the drawing canvas and write naturally.
 
 ---
 
@@ -223,7 +235,7 @@ Turn the entire keyboard space into a fluid laptop-style trackpad:
 Detach LeanType into a moveable, resizable floating window:
 - Tap the **Floating Keyboard** icon on the toolbar.
 - Drag the bottom handle to reposition anywhere on the screen.
-- Drag corner handles to resize.
+- Drag corner handles to resize with live real-time proportional key scaling.
 - Enable **Persistent Floating Mode** to keep the keyboard floating across app switches.
 
 ---
@@ -235,9 +247,9 @@ Split your toolbar and suggestion strip into two independent rows for fast, unhi
 
 ---
 
-## 12. Text Expander
+## 12. Versatile Text Expander & Modifiers
 
-Define custom abbreviations that instantly expand into rich text templates with dynamic variables:
+Define custom abbreviations that instantly expand into rich text templates with dynamic variables, citation cleaning, and chained text modifiers:
 
 ### Supported Dynamic Placeholders
 - `%date%`: Inserts current date (YYYY-MM-DD).
@@ -249,9 +261,22 @@ Define custom abbreviations that instantly expand into rich text templates with 
 - `%bullets%` / `%list%`: Inserts templated bulleted or numbered lists.
 - `%custom_variable%`: Prompts an interactive popup to fill in custom text on the fly.
 
+### Composable Clipboard Modifiers
+Transform clipboard content on the fly by appending modifiers (`%clipboard:<mod1>:<mod2>%`):
+- `%clipboard:clean%` / `%clipboard:nocite%`: Automatically strips bracketed Wikipedia / academic citations (`[1]`, `[1][2]`, `[note 1]`, `[citation needed]`) and cleans formatting.
+- `%clipboard:singleline%` / `%clipboard:oneline%`: Flattens multi-line text into a single line.
+- `%clipboard:title%`: Converts clipboard text to Title Case.
+- `%clipboard:slug%` / `%clipboard:kebab%`: Converts text into a kebab-case URL slug (e.g. `my-awesome-post`).
+- `%clipboard:snake%` / `%clipboard:camel%`: Converts text to `snake_case` or `camelCase`.
+- `%clipboard:upper%` / `%clipboard:lower%`: Converts text to UPPERCASE or lowercase.
+- `%clipboard:trim%`: Removes leading and trailing whitespace.
+- `%clipboard:unquote%`: Strips outer quotation marks.
+- `%clipboard:nourl%`: Removes URLs from text.
+- `%clipboard:replace(pattern, replacement)%`: Performs custom regex find-and-replace.
+
 ### Setup Instructions
 1. Open **Settings → Text correction → Text Expander**.
-2. Tap **+ (Add)**, define the shortcut (e.g. `brb`), and enter your expansion template.
+2. Tap **+ (Add)**, define the shortcut (e.g. `cite`), and enter your expansion template (e.g. `%clipboard:clean%`).
 
 ---
 
@@ -350,18 +375,88 @@ Map the custom keycode `-10076` (`SWITCH_TO_USER_IME`) to any toolbar key:
 ---
 
 ## 23. Flavor Architecture & Privacy
-
-LeanType is published in **4 purpose-built flavors**:
-
-| Flavor | Cloud AI | Offline AI | Voice Input | Handwriting | In-App Updates | Internet Permission | Min SDK | Approx Size |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Standard Full** | ✅ | ❌ | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ | 🌐 Required *(Opt-in)* | SDK 23 (6.0+) | **~23 MB** |
-| **Standard (FOSS)** | ✅ | ❌ | ✅ *(Plugin)* | ❌ | ❌ | 🌐 Required *(Opt-in)* | SDK 23 (6.0+) | **~11 MB** |
-| **Offline AI** | ❌ | ✅ *(GGUF)* | ✅ *(Plugin)* | ❌ | ❌ | 🚫 **None** | SDK 26 (8.0+) | **~67 MB** |
-| **Offline Lite** | ❌ | ❌ | ✅ *(Plugin)* | ❌ | ❌ | 🚫 **None** | SDK 21 (5.0+) | **~26 MB** |
+ 
+LeanType is published in **3 purpose-built flavors**:
+ 
+| Flavor | Cloud AI | Offline AI | Voice Input | Handwriting | OCR Extraction | Translation | In-App Updates | Internet Permission | Min SDK | Approx Size |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Standard Full** | ✅ | ❌ | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ *(Plugin/AI)* | ✅ | 🌐 Optional *(Opt-in)* | SDK 23 (6.0+) | **~10.8 MB** |
+| **Standard (FOSS)** | ✅ | ❌ | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ *(Plugin/AI)* | ❌ | 🌐 Optional *(Opt-in)* | SDK 23 (6.0+) | **~10.8 MB** |
+| **Offline** | ❌ | ✅ *(Plugin on 8.0+)* | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ *(Plugin)* | ✅ *(Plugin)* | ❌ | 🚫 **None** | SDK 21 (5.0+) | **~9.8 MB** |
 
 > [!TIP]
-> **Concurrent Installation**: The `offline` (`com.leanbitlab.leantype.offline`) and `offlinelite` (`com.leanbitlab.leantype.offlinelite`) builds use unique package IDs, allowing you to install them alongside `standardfull` on the same device!
+> **Concurrent Installation**: The `offline` (`com.leanbitlab.leantype.offline`) build uses a unique package ID, allowing you to install it alongside `standardfull` on the same device!
 
+---
 
+## 24. Offline Camera OCR & Screenshot Extraction
 
+LeanType features an on-device OCR engine powered by ML Kit via the [LeanType OCR Plugin](https://github.com/LeanBitLab/LeanType-Ocr-Plugin) (supported across all flavors), enabling instant text extraction from live camera feeds or captured screenshots with zero internet connectivity.
+
+### 📷 In-Keyboard Camera Scanner
+- Tap the **Camera / OCR** key on the toolbar to open a live camera viewfinder embedded directly inside the keyboard window.
+- **Controls**: Top flash toggle, real-time autofocus, shutter capture button, and gallery image picker fallback.
+- **Instant Result Strip**: Displays recognized text immediately with 1-tap options to copy, insert into the current input field, or apply transformations.
+
+### 🖼️ Screenshot Extraction Suggestion Pill
+- Automatically detects screenshots captured on your device (within 4 minutes) and renders a unified compact pill on the suggestion strip: `[OCR] [Screenshot] [X]`.
+- Tap **`[OCR]`** to extract text directly from the screenshot without leaving your current app.
+- Tap **`[Screenshot]`** to paste or share the image directly.
+- Tap **`[X]`** to dismiss the suggestion.
+
+### 🛠️ Advanced Text Formatting Cleaners
+Customize how extracted text is processed and formatted before insertion:
+- **Casing Transformations**: Original, UPPERCASE, lowercase, Title Case, or Sentence case.
+- **Line Joining Modes**: Keep original line breaks, merge all lines into a single continuous paragraph, or automatically rejoin hyphenated words split across lines (`anti-` + `gravity` $\rightarrow$ `antigravity`).
+- **Punctuation Normalization**: Cleans irregular punctuation marks, curly quotes, and repeated spaces.
+- **Bullet & List-Marker Stripping**: Cleans away bullet characters (`•`, `-`, `*`, `1.`, `a)`) for clean paragraph flow.
+- **Whitespace & Noise Filtering**: Automatically strips leading/trailing blank spaces and filtered OCR noise artifacts.
+- **Configurable Preferences**: Auto-copy recognized text to clipboard, auto-insert directly into text fields, persistent camera flash state, and search indexing support.
+
+---
+
+## 25. Inline Math Calculation Suggestions
+
+Perform calculations instantly while typing in any app without switching to an external calculator:
+
+### 🔢 How It Works
+- Type any arithmetic expression followed immediately by an equals sign (`=`).
+- The evaluated result appears instantly as a clean suggestion chip in the suggestion strip (e.g. typing `25*4=` offers `100`).
+- Tap the chip to replace the entire typed math expression in-place with the evaluated answer.
+
+### ➕ Supported Operations & Math Functions
+- **Basic Arithmetic**: Addition (`+`), subtraction/unary negation (`-`, `−`), multiplication (`*`, `×`), division (`/`, `÷`).
+- **Percentages**: e.g. `500-15%=` $\rightarrow$ `425`, `200+10%=` $\rightarrow$ `220`.
+- **Exponents & Powers**: e.g. `2^8=` $\rightarrow$ `256`.
+- **Grouping Parentheses**: e.g. `(12+8)/4=` $\rightarrow$ `5`.
+- **High Precision**: Built with a pure Kotlin `BigDecimal` parsing engine with robust scientific formatting and division-by-zero protection.
+
+### ⚙️ Settings
+- Enable or disable via **Settings → Text correction → Inline math calculation**.
+
+---
+
+## 26. Custom Sound Packs & Audio Customization
+
+LeanType includes a zero-latency native keypress audio feedback engine that delivers rich auditory tactile response:
+
+### 🎵 12+ Built-in Audio Presets
+- **iOS Tap**: Crisp, modern Apple-style click sound.
+- **Mechanical Cherry MX**: Classic mechanical keyboard tactile switch clicks.
+- **Thocky Mechanical**: Deep, resonant mechanical switch sound profile.
+- **Vintage Typewriter**: Authentic acoustic typewriter key strikes and carriage feel.
+- **Retro CRT Terminal**: Nostalgic 80s phosphor green terminal clicks.
+- **Bubble Pop**: Playful, gentle bubble popping sounds.
+- **Soft Velvet / Pudding**: Muted, low-profile quiet typing experience.
+- **Woodblock Minimal**: Clean organic wooden percussion clicks.
+- **Acoustic Marimba**: Melodic wooden bar acoustic chime feedback.
+- **Modern Crisp Tick**: Subtle, high-frequency modern key tick.
+- **Sci-Fi Cyberpunk**: Futuristic electronic digital interface hums.
+- **8-Bit Chiptune Arcade**: Retro arcade game console key blips.
+
+### 🌐 Remote Sound Pack Repository & Custom Imports
+- **Remote Catalog**: Download additional physical modeling and synthesized instrument packs on demand from the official GitHub sound pack repository (`LeanBitLab/LeanType-Sound-Packs`).
+- **Unbundled Light Footprint**: Sound packs are unbundled from the core APK to keep download sizes under 11 MB.
+- **Custom `.zip` Pack Import**: Import custom sound packs packaged as a `.zip` containing a `soundpack.json` manifest and keypress audio files (`.wav` or `.ogg`).
+- **Live Audition & Volume**: Audition sounds with live sample playback (▶️) and fine-tune keypress audio volume independently from system media volume.
+- **Dedicated Settings Screen**: Access via **Settings → Plugins → Keypress Audio / Sound** or **Settings → Preferences → Sound on keypress**.

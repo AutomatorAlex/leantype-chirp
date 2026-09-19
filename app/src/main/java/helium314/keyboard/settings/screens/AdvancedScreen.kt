@@ -32,11 +32,6 @@ import helium314.keyboard.keyboard.KeyboardActionListener
 import helium314.keyboard.keyboard.KeyboardLayoutSet
 import helium314.keyboard.keyboard.KeyboardSwitcher
 import helium314.keyboard.keyboard.emoji.SupportedEmojis
-import helium314.keyboard.keyboard.internal.keyboard_parser.POPUP_KEYS_ALL
-import helium314.keyboard.keyboard.internal.keyboard_parser.POPUP_KEYS_MAIN
-import helium314.keyboard.keyboard.internal.keyboard_parser.POPUP_KEYS_MORE
-import helium314.keyboard.keyboard.internal.keyboard_parser.POPUP_KEYS_NORMAL
-import helium314.keyboard.keyboard.internal.keyboard_parser.morePopupKeysResId
 import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.SystemBroadcastReceiver
@@ -93,21 +88,13 @@ fun AdvancedSettingsScreen(
     val items = listOfNotNull(
         Settings.PREF_ALWAYS_INCOGNITO_MODE,
         Settings.PREF_DISABLE_NETWORK,
-        Settings.PREF_KEY_LONGPRESS_TIMEOUT,
         if (Settings.readHorizontalSpaceSwipe(prefs) == KeyboardActionListener.SWIPE_SWITCH_LANGUAGE
             || Settings.readVerticalSpaceSwipe(prefs) == KeyboardActionListener.SWIPE_SWITCH_LANGUAGE)
             Settings.PREF_LANGUAGE_SWIPE_DISTANCE else null,
-        Settings.PREF_SPACE_TO_CHANGE_LANG,
-        Settings.PREFS_LONG_PRESS_SYMBOLS_FOR_NUMPAD,
         Settings.PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY,
         Settings.PREF_PHYSICAL_KEYBOARD_SUGGESTION_SHORTCUTS,
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) Settings.PREF_SHOW_SETUP_WIZARD_ICON else null,
-        Settings.PREF_ABC_AFTER_SYMBOL_SPACE,
-        Settings.PREF_ABC_AFTER_NUMPAD_SPACE,
-        Settings.PREF_ABC_AFTER_EMOJI,
-        Settings.PREF_ABC_AFTER_CLIP,
         Settings.PREF_CUSTOM_CURRENCY_KEY,
-        Settings.PREF_MORE_POPUP_KEYS,
         Settings.PREF_TIMESTAMP_FORMAT,
         SettingsWithoutKey.BACKGROUND_SERVICES,
         SettingsWithoutKey.BACKUP_RESTORE,
@@ -116,7 +103,6 @@ fun AdvancedSettingsScreen(
         R.string.settings_category_experimental,
         Settings.PREF_EMOJI_MAX_SDK,
         Settings.PREF_URL_DETECTION,
-
     )
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -132,16 +118,6 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
     {
         SwitchPreference(it, Defaults.PREF_ALWAYS_INCOGNITO_MODE) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     },
-    Setting(context, Settings.PREF_KEY_LONGPRESS_TIMEOUT, R.string.prefs_key_longpress_timeout_settings) { setting ->
-        SliderPreference(
-            name = setting.title,
-            key = setting.key,
-            default = Defaults.PREF_KEY_LONGPRESS_TIMEOUT,
-            range = 100f..700f,
-            description = { stringResource(R.string.abbreviation_unit_milliseconds, it.toString()) }
-        )
-    },
-
     Setting(context, Settings.PREF_LANGUAGE_SWIPE_DISTANCE, R.string.prefs_language_swipe_distance) { setting ->
         SliderPreference(
             name = setting.title,
@@ -150,16 +126,6 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
             range = 2f..18f,
             description = { it.toString() }
         )
-    },
-
-    Setting(context, Settings.PREF_SPACE_TO_CHANGE_LANG,
-        R.string.prefs_long_press_keyboard_to_change_lang,
-        R.string.prefs_long_press_keyboard_to_change_lang_summary)
-    {
-        SwitchPreference(it, Defaults.PREF_SPACE_TO_CHANGE_LANG)
-    },
-    Setting(context, Settings.PREFS_LONG_PRESS_SYMBOLS_FOR_NUMPAD, R.string.prefs_long_press_symbol_for_numpad) {
-        SwitchPreference(it, Defaults.PREFS_LONG_PRESS_SYMBOLS_FOR_NUMPAD)
     },
     Setting(context, Settings.PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY, R.string.prefs_enable_emoji_alt_physical_key,
         R.string.prefs_enable_emoji_alt_physical_key_summary)
@@ -180,22 +146,6 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
         val ctx = LocalContext.current
         SwitchPreference(it, Defaults.PREF_SHOW_SETUP_WIZARD_ICON) { SystemBroadcastReceiver.toggleAppIcon(ctx) }
     },
-    Setting(context, Settings.PREF_ABC_AFTER_SYMBOL_SPACE,
-        R.string.switch_keyboard_after, R.string.after_symbol_and_space)
-    {
-        SwitchPreference(it, Defaults.PREF_ABC_AFTER_SYMBOL_SPACE)
-    },
-    Setting(context, Settings.PREF_ABC_AFTER_NUMPAD_SPACE,
-        R.string.switch_keyboard_after, R.string.after_numpad_and_space)
-    {
-        SwitchPreference(it, Defaults.PREF_ABC_AFTER_NUMPAD_SPACE)
-    },
-    Setting(context, Settings.PREF_ABC_AFTER_EMOJI, R.string.switch_keyboard_after, R.string.after_emoji) {
-        SwitchPreference(it, Defaults.PREF_ABC_AFTER_EMOJI)
-    },
-    Setting(context, Settings.PREF_ABC_AFTER_CLIP, R.string.switch_keyboard_after, R.string.after_clip) {
-        SwitchPreference(it, Defaults.PREF_ABC_AFTER_EMOJI)
-    },
     Setting(context, Settings.PREF_CUSTOM_CURRENCY_KEY, R.string.customize_currencies) { setting ->
         var showDialog by rememberSaveable { mutableStateOf(false) }
         Preference(
@@ -207,7 +157,7 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
             TextInputDialog(
                 onDismissRequest = { showDialog = false },
                 textInputLabel = { Text(stringResource(R.string.customize_currencies_detail)) },
-                initialText = prefs.getString(setting.key, Defaults.PREF_CUSTOM_CURRENCY_KEY)!!,
+                initialText = prefs.getString(setting.key, Defaults.PREF_CUSTOM_CURRENCY_KEY) ?: Defaults.PREF_CUSTOM_CURRENCY_KEY,
                 onConfirmed = { prefs.edit { putString(setting.key, it) }; KeyboardLayoutSet.onSystemLocaleChanged() },
                 title = { Text(stringResource(R.string.customize_currencies)) },
                 neutralButtonText = if (prefs.contains(setting.key)) stringResource(R.string.button_default) else null,
@@ -215,12 +165,6 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
                 checkTextValid = { text -> text.splitOnWhitespace().none { it.length > 8 } }
             )
         }
-    },
-    Setting(context, Settings.PREF_MORE_POPUP_KEYS, R.string.show_popup_keys_title) {
-        val items = listOf(POPUP_KEYS_NORMAL, POPUP_KEYS_MAIN, POPUP_KEYS_MORE, POPUP_KEYS_ALL).map { setting ->
-            stringResource(morePopupKeysResId(setting)) to setting
-        }
-        ListPreference(it, items, Defaults.PREF_MORE_POPUP_KEYS) { KeyboardLayoutSet.onSystemLocaleChanged() }
     },
     Setting(context, SettingsWithoutKey.BACKUP_RESTORE, R.string.backup_restore_title) {
         BackupRestorePreference(it)
@@ -486,17 +430,90 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
     Setting(context, SettingsWithoutKey.AI_ALLOW_INSECURE_CONNECTIONS, R.string.ai_allow_insecure_connections_title, R.string.ai_allow_insecure_connections_summary) { setting ->
         SwitchPreference(setting, Defaults.PREF_AI_ALLOW_INSECURE_CONNECTIONS)
     },
-    Setting(context, SettingsWithoutKey.TRANSLATION_ENGINE, R.string.translation_engine_title, R.string.translation_engine_summary) { setting ->
-        ListPreference(
-            setting = setting,
-            items = listOf(
-                "Auto (Plugin if loaded, else AI)" to "auto",
-                "Translation Plugin" to "plugin",
-                "Built-in AI (Gemini/Groq/OpenAI)" to "ai"
-            ),
-            default = "auto"
+    Setting(context, SettingsWithoutKey.CLOUD_AI_MAX_TOKENS, R.string.cloud_ai_max_tokens_title, R.string.cloud_ai_max_tokens_summary) {
+        val prefs = context.prefs()
+        var maxTokens by remember { mutableStateOf(prefs.getInt(Settings.PREF_CLOUD_AI_MAX_TOKENS, Defaults.PREF_CLOUD_AI_MAX_TOKENS)) }
+        var showListDialog by rememberSaveable { mutableStateOf(false) }
+        var showCustomDialog by rememberSaveable { mutableStateOf(false) }
+
+        val tokenEntries = context.resources.getStringArray(R.array.cloud_ai_max_tokens_entries)
+        val tokenValues = context.resources.getStringArray(R.array.cloud_ai_max_tokens_values).map { it.toInt() }
+        val tokenItems = tokenEntries.zip(tokenValues)
+
+        val currentItem = tokenItems.firstOrNull { it.second == maxTokens }
+        val description = currentItem?.first ?: context.getString(R.string.cloud_ai_max_tokens_custom_desc, maxTokens)
+
+        Preference(
+            name = context.getString(R.string.cloud_ai_max_tokens_title),
+            description = description,
+            onClick = { showListDialog = true }
         )
+
+        val dialogItems = tokenItems + (context.getString(R.string.cloud_ai_max_tokens_custom_option) to -1)
+
+        if (showListDialog) {
+            ListPickerDialog(
+                onDismissRequest = { showListDialog = false },
+                items = dialogItems,
+                onItemSelected = {
+                    showListDialog = false
+                    if (it.second == -1) {
+                        showCustomDialog = true
+                    } else {
+                        maxTokens = it.second
+                        prefs.edit().putInt(Settings.PREF_CLOUD_AI_MAX_TOKENS, it.second).apply()
+                    }
+                },
+                selectedItem = currentItem ?: dialogItems.last(),
+                title = { Text(context.getString(R.string.cloud_ai_max_tokens_title)) },
+                getItemName = { it.first }
+            )
+        }
+
+        if (showCustomDialog) {
+            TextInputDialog(
+                onDismissRequest = { showCustomDialog = false },
+                onConfirmed = { text ->
+                    showCustomDialog = false
+                    val value = text.toIntOrNull()
+                    if (value != null && value > 0) {
+                        maxTokens = value
+                        prefs.edit().putInt(Settings.PREF_CLOUD_AI_MAX_TOKENS, value).apply()
+                    }
+                },
+                title = { Text(context.getString(R.string.cloud_ai_max_tokens_title)) },
+                initialText = if (maxTokens !in tokenValues) maxTokens.toString() else "",
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                checkTextValid = { text ->
+                    val value = text.toIntOrNull()
+                    value != null && value > 0
+                }
+            )
+        }
     },
+    if (BuildConfig.FLAVOR != "offline" || android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        Setting(context, SettingsWithoutKey.TRANSLATION_ENGINE, R.string.translation_engine_title, R.string.translation_engine_summary) { setting ->
+            val isOfflineFlavor = BuildConfig.FLAVOR == "offline"
+            val items = if (isOfflineFlavor) {
+                listOf(
+                    "Auto (Plugin if loaded, else Local AI)" to "auto",
+                    "Translation Plugin" to "plugin",
+                    "Built-in AI (Local GGUF)" to "ai"
+                )
+            } else {
+                listOf(
+                    "Auto (Plugin if loaded, else AI)" to "auto",
+                    "Translation Plugin" to "plugin",
+                    "Built-in AI (Gemini/Groq/OpenAI)" to "ai"
+                )
+            }
+            ListPreference(
+                setting = setting,
+                items = items,
+                default = "auto"
+            )
+        }
+    } else null,
     Setting(context, SettingsWithoutKey.GEMINI_TARGET_LANGUAGE, R.string.translate_target_language_title, R.string.translate_target_language_summary) { setting ->
         val ctx = LocalContext.current
         val service = remember { helium314.keyboard.latin.utils.ProofreadService(ctx) }
@@ -524,7 +541,12 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
         }
 
         val displayLabel = remember(selectedLanguage, items) {
-            items.find { it.second.equals(selectedLanguage, ignoreCase = true) }?.first ?: selectedLanguage
+            val found = items.find { it.second.equals(selectedLanguage, ignoreCase = true) }
+            if (found != null) {
+                "${found.first} (${found.second})"
+            } else {
+                selectedLanguage
+            }
         }
 
         helium314.keyboard.settings.preferences.Preference(
@@ -559,6 +581,10 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
                                     .fillMaxWidth()
                                     .clickable {
                                         service.setTargetLanguage(code)
+                                        ctx.prefs().edit().apply {
+                                            putString(setting.key, code)
+                                            putString(Settings.PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE, name)
+                                        }.apply()
                                         helium314.keyboard.latin.utils.TranslationUtils.saveLanguageHistory(ctx.prefs(), name, code)
                                         selectedLanguage = code
                                         showPickerDialog = false
@@ -570,13 +596,17 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
                                     selected = isSelected,
                                     onClick = {
                                         service.setTargetLanguage(code)
+                                        ctx.prefs().edit().apply {
+                                            putString(setting.key, code)
+                                            putString(Settings.PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE, name)
+                                        }.apply()
                                         helium314.keyboard.latin.utils.TranslationUtils.saveLanguageHistory(ctx.prefs(), name, code)
                                         selectedLanguage = code
                                         showPickerDialog = false
                                     }
                                 )
                                 Text(
-                                    text = name,
+                                    text = "$name ($code)",
                                     modifier = androidx.compose.ui.Modifier
                                         .weight(1f)
                                         .padding(start = 8.dp)
@@ -585,7 +615,7 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
                                     onClick = {
                                         helium314.keyboard.latin.utils.TranslationUtils.removeLanguageHistory(ctx.prefs(), code)
                                         if (isSelected) {
-                                            val fallback = "English"
+                                            val fallback = "en"
                                             service.setTargetLanguage(fallback)
                                             selectedLanguage = fallback
                                         }
@@ -613,7 +643,10 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
                     val trimmed = customLang.trim()
                     if (trimmed.isNotEmpty()) {
                         service.setTargetLanguage(trimmed)
-                        ctx.prefs().edit().putString(setting.key, trimmed).apply()
+                        ctx.prefs().edit().apply {
+                            putString(setting.key, trimmed)
+                            putString(Settings.PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE, trimmed)
+                        }.apply()
                         helium314.keyboard.latin.utils.TranslationUtils.saveLanguageHistory(ctx.prefs(), trimmed, trimmed)
                         selectedLanguage = trimmed
                     }
@@ -685,6 +718,70 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
             )
         }
     },
+    Setting(context, SettingsWithoutKey.VOICE_GEMINI_MODEL, R.string.voice_model_title, R.string.voice_model_summary) { setting ->
+        val ctx = LocalContext.current
+        val service = remember { helium314.keyboard.latin.utils.ProofreadService(ctx) }
+        var items by remember { mutableStateOf(listOf("Default (gemini-2.0-flash)" to "") + listOf("gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-1.5-flash").map { it to it }) }
+        var selectedModel by remember { mutableStateOf(service.getVoiceGeminiModel()) }
+
+        LaunchedEffect(Unit) {
+            val models = service.fetchAvailableVoiceModels(helium314.keyboard.latin.utils.ProofreadService.AIProvider.GEMINI)
+            items = listOf("Default (gemini-2.0-flash)" to "") + models.map { it to it }
+        }
+
+        ListPreference(
+            setting = setting,
+            items = items,
+            default = selectedModel,
+            onChanged = { newModel ->
+                service.setVoiceGeminiModel(newModel)
+                selectedModel = newModel
+            }
+        )
+    },
+    Setting(context, SettingsWithoutKey.VOICE_GROQ_MODEL, R.string.voice_model_title, R.string.voice_model_summary) { setting ->
+        val ctx = LocalContext.current
+        val service = remember { helium314.keyboard.latin.utils.ProofreadService(ctx) }
+        var items by remember { mutableStateOf(listOf("Default (whisper-large-v3-turbo)" to "") + helium314.keyboard.latin.utils.GroqModels.VOICE_MODELS.map { it to it }) }
+        var selectedModel by remember { mutableStateOf(service.getVoiceGroqModel()) }
+
+        LaunchedEffect(Unit) {
+            val models = service.fetchAvailableVoiceModels(helium314.keyboard.latin.utils.ProofreadService.AIProvider.GROQ)
+            items = listOf("Default (whisper-large-v3-turbo)" to "") + models.map { it to it }
+        }
+
+        ListPreference(
+            setting = setting,
+            items = items,
+            default = selectedModel,
+            onChanged = { newModel ->
+                service.setVoiceGroqModel(newModel)
+                selectedModel = newModel
+            }
+        )
+    },
+    Setting(context, SettingsWithoutKey.VOICE_HUGGINGFACE_MODEL, R.string.voice_model_title, R.string.voice_model_summary) { setting ->
+        var showDialog by rememberSaveable { mutableStateOf(false) }
+        val ctx = LocalContext.current
+        val service = remember { helium314.keyboard.latin.utils.ProofreadService(ctx) }
+        val currentModel = service.getVoiceHuggingFaceModel().ifBlank { "Default (whisper-1)" }
+        Preference(
+            name = setting.title,
+            description = currentModel,
+            onClick = { showDialog = true }
+        )
+        if (showDialog) {
+            TextInputDialog(
+                onDismissRequest = { showDialog = false },
+                textInputLabel = { Text("model-name") },
+                initialText = service.getVoiceHuggingFaceModel(),
+                onConfirmed = { service.setVoiceHuggingFaceModel(it) },
+                title = { Text(stringResource(R.string.voice_model_title)) }
+            )
+        }
+    },
+    // Chirp STT settings. Defined here because createAdvancedSettings is the global
+    // Setting registry; they are only *displayed* on the AI Integration screen.
     Setting(context, SettingsWithoutKey.CHIRP_PROVIDER, R.string.chirp_provider_title, R.string.chirp_provider_summary) { setting ->
         var showDialog by rememberSaveable { mutableStateOf(false) }
         val ctx = LocalContext.current
@@ -810,6 +907,13 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
             onClick = { SettingsDestination.navigateTo(SettingsDestination.CustomAIKeys) }
         ) { NextScreenIcon() }
     } else null,
+    if (BuildConfig.FLAVOR == "offline") Setting(context, SettingsWithoutKey.LOAD_OFFLINE_AI_PLUGIN, R.string.load_offline_ai_plugin, R.string.load_offline_ai_plugin_summary) {
+        helium314.keyboard.settings.preferences.LoadOfflineAiPluginPreference(
+            title = stringResource(R.string.load_offline_ai_plugin),
+            summary = if (helium314.keyboard.latin.ai.OfflineAiLoader.hasPlugin(LocalContext.current)) "Plugin active (version ${helium314.keyboard.latin.ai.OfflineAiLoader.getPluginVersion(LocalContext.current) ?: "1.0"})" else stringResource(R.string.load_offline_ai_plugin_summary),
+            icon = R.drawable.ic_proofread
+        )
+    } else null,
     if (BuildConfig.FLAVOR == "offline") Setting(context, SettingsWithoutKey.OFFLINE_KEEP_MODEL_LOADED, R.string.offline_keep_model_loaded_title, R.string.offline_keep_model_loaded_summary) {
         SwitchPreference(it, Defaults.PREF_OFFLINE_KEEP_MODEL_LOADED)
     } else null,
@@ -891,16 +995,6 @@ fun createAdvancedSettings(context: Context) = listOfNotNull(
                 name = "Translate Instruction",
                 description = service.getTranslateSystemPrompt().takeIf { it.isNotBlank() } ?: "Default",
                 onClick = { showTranslateSystemPromptDialog = true }
-            )
-
-            // Target Language for Translation
-            val languageSetting = Setting(context, Settings.PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE, R.string.translate_target_language_title, R.string.translate_target_language_summary) { }
-            val languages = listOf("French", "German", "Romanian", "Spanish", "Italian", "Dutch", "Portuguese", "Russian", "Chinese", "Japanese")
-            val languageItems = languages.map { it to it }
-            ListPreference(
-                setting = languageSetting,
-                items = languageItems,
-                default = Defaults.PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE
             )
             
             Spacer(modifier = Modifier.height(16.dp))

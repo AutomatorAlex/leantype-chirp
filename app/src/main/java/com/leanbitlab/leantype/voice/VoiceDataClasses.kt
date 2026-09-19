@@ -47,7 +47,9 @@ data class VoiceSessionConfig(
     val enablePartial: Boolean,
     val maxSegmentMs: Int,
     val hybridTimeoutMs: Int,
-    val hybridFallbackToVosk: Boolean
+    val hybridFallbackToVosk: Boolean,
+    val cpuThreads: Int = 4,
+    val customPrompt: String? = null
 ) : Parcelable
 
 object VoiceConstants {
@@ -70,6 +72,16 @@ object VoiceConstants {
     const val VOICE_ERROR_UNKNOWN = 1008
 
     const val PREF_VOICE_OFFLINE_ENABLED = "voice_offline_enabled"
+    const val PREF_VOICE_ONLINE_ENABLED = "voice_online_enabled"
+    const val PREF_VOICE_PROVIDER = "voice_provider"
+    const val VOICE_PROVIDER_OFFLINE = "offline"
+    const val VOICE_PROVIDER_ONLINE = "online"
+    const val VOICE_PROVIDER_THIRD_PARTY = "third_party"
+    const val VOICE_PROVIDER_NONE = "none"
+
+    const val PREF_VOICE_THIRD_PARTY_APP = "voice_third_party_app"
+    const val VOICE_APP_SYSTEM_DEFAULT = "system_default"
+
     const val PREF_VOICE_MODE = "voice_mode"
     const val PREF_VOICE_HYBRID_TIMEOUT_MS = "voice_hybrid_timeout_ms"
     const val PREF_VOICE_HYBRID_FALLBACK = "voice_hybrid_fallback"
@@ -81,6 +93,10 @@ object VoiceConstants {
     const val PREF_VOICE_LANGUAGE = "voice_language"
     const val VOICE_LANG_FOLLOW_KEYBOARD = "follow_keyboard"
     const val VOICE_LANG_AUTO = "auto"
+    const val PREF_VOICE_CPU_THREADS = "voice_cpu_threads"
+    const val PREF_VOICE_CUSTOM_PROMPT = "voice_custom_prompt"
+    const val PREF_VOICE_MIC_SENSITIVITY = "voice_mic_sensitivity"
+    const val PREF_VOICE_MAX_DURATION_SECONDS = "voice_max_duration_seconds"
     const val PREF_USE_DEBUG_VOICE_STUB = "use_debug_voice_stub"
     const val VOICE_PLUGIN_PACKAGE = "com.leanbitlab.leantype.voice.offline"
 }

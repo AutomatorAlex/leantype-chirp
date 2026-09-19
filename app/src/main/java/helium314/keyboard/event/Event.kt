@@ -6,6 +6,7 @@
 
 package helium314.keyboard.event
 
+import android.view.KeyEvent
 import helium314.keyboard.latin.SuggestedWords.SuggestedWordInfo
 import helium314.keyboard.latin.common.Constants
 import helium314.keyboard.latin.common.StringUtils
@@ -65,7 +66,13 @@ class Event private constructor(
     // Returns whether this is a function key like backspace, ctrl, settings... as opposed to keys
     // that result in input like letters or space.
     val isFunctionalKeyEvent: Boolean
-        get() = NOT_A_CODE_POINT == codePoint || metaState != 0 // This logic may need to be refined in the future
+        get() {
+            if (NOT_A_CODE_POINT == codePoint) return true
+            // If it produces a character, it's only functional if Ctrl, Meta, or left Alt is held down.
+            // Lock states (NumLock, CapsLock, ScrollLock) and Shift must never make character input functional.
+            val functionalModifiers = KeyEvent.META_CTRL_MASK or KeyEvent.META_META_MASK or KeyEvent.META_ALT_LEFT_ON
+            return (metaState and functionalModifiers) != 0
+        }
 
     // Returns whether this event is for a dead character. @see {@link #FLAG_DEAD}
     val isDead: Boolean get() = 0 != FLAG_DEAD and flags
@@ -139,7 +146,6 @@ class Event private constructor(
         // This event is a combining character, usually a hangul input.
         private const val FLAG_COMBINING = 0x8
 
-        @JvmStatic
         fun createSoftwareKeypressEvent(codePoint: Int, keyCode: Int, metaState: Int, x: Int, y: Int, isKeyRepeat: Boolean) =
             Event(
                 eventType = EVENT_TYPE_INPUT_KEYPRESS,
@@ -153,7 +159,6 @@ class Event private constructor(
 
         // A helper method to split the code point and the key code.
         // todo: Ultimately, they should not be squashed into the same variable, and this method should be removed.
-        @JvmStatic
         fun createSoftwareKeypressEvent(keyCodeOrCodePoint: Int, metaState: Int, keyX: Int, keyY: Int, isKeyRepeat: Boolean) =
             if (keyCodeOrCodePoint <= 0) {
                 createSoftwareKeypressEvent(NOT_A_CODE_POINT, keyCodeOrCodePoint, metaState, keyX, keyY, isKeyRepeat)
@@ -206,7 +211,6 @@ class Event private constructor(
          * @param codePoint the code point.
          * @return an event for this code point.
          */
-        @JvmStatic
         // TODO: should we have a different type of event for this? After all, it's not a key press.
         fun createEventForCodePointFromUnknownSource(codePoint: Int) = Event(eventType = EVENT_TYPE_INPUT_KEYPRESS, codePoint = codePoint)
 
@@ -218,7 +222,6 @@ class Event private constructor(
          * @param y the Y coordinate.
          * @return an event for this code point and coordinates.
          */
-        @JvmStatic
         // TODO: should we have a different type of event for this? After all, it's not a key press.
         fun createEventForCodePointFromAlreadyTypedText(codePoint: Int, x: Int, y: Int) =
             Event(eventType = EVENT_TYPE_INPUT_KEYPRESS, codePoint = codePoint, x = x, y = y)
@@ -227,7 +230,6 @@ class Event private constructor(
          * Creates an input event representing the manual pick of a suggestion.
          * @return an event for this suggestion pick.
          */
-        @JvmStatic
         fun createSuggestionPickedEvent(suggestedWordInfo: SuggestedWordInfo) =
             Event(
                 eventType = EVENT_TYPE_SUGGESTION_PICKED,
@@ -246,7 +248,6 @@ class Event private constructor(
          * @param nextEvent the next event, or null if not applicable.
          * @return an event for this text.
          */
-        @JvmStatic
         fun createSoftwareTextEvent(text: CharSequence?, keyCode: Int, nextEvent: Event? = null) =
             Event(eventType = EVENT_TYPE_SOFTWARE_GENERATED_STRING, text = text, keyCode = keyCode, nextEvent = nextEvent)
 
@@ -254,7 +255,6 @@ class Event private constructor(
          * Creates an input event representing the manual pick of a punctuation suggestion.
          * @return an event for this suggestion pick.
          */
-        @JvmStatic
         fun createPunctuationSuggestionPickedEvent(suggestedWordInfo: SuggestedWordInfo) =
             Event(
                 eventType = EVENT_TYPE_SUGGESTION_PICKED,
@@ -271,7 +271,6 @@ class Event private constructor(
          * @param moveAmount the relative move amount.
          * @return an event for this cursor move.
          */
-        @JvmStatic
         fun createCursorMovedEvent(moveAmount: Int) = Event(eventType = EVENT_TYPE_CURSOR_MOVE, x = moveAmount)
 
         /**

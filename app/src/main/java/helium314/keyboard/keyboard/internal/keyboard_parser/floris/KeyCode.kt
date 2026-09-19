@@ -204,6 +204,7 @@ object KeyCode {
     const val HANDWRITING =               -10074
     const val CLEAR_HANDWRITING =         -10075
     const val SWITCH_TO_USER_IME =        -10076
+    const val OCR =                       -10077
 
 
     // Intents
@@ -229,7 +230,7 @@ object KeyCode {
         TIMESTAMP, CTRL_LEFT, CTRL_RIGHT, ALT_LEFT, ALT_RIGHT, META_LEFT, META_RIGHT, SEND_INTENT_ONE, SEND_INTENT_TWO,
         SEND_INTENT_THREE, INLINE_EMOJI_SEARCH_DONE, META_LOCK, PROOFREAD, TRANSLATE, SHOW_TRANSLATE_LANGUAGES,
         CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, CUSTOM_AI_4, CUSTOM_AI_5,
-        CUSTOM_AI_6, CUSTOM_AI_7, CUSTOM_AI_8, CUSTOM_AI_9, CUSTOM_AI_10, CLIPBOARD_SEARCH, TOGGLE_FLOATING_KEYBOARD, TOGGLE_TOUCHPAD_MODE, TOGGLE_TEXT_EDIT_MODE, TOGGLE_SELECTION_MODE, HANDWRITING, CLEAR_HANDWRITING,
+        CUSTOM_AI_6, CUSTOM_AI_7, CUSTOM_AI_8, CUSTOM_AI_9, CUSTOM_AI_10, CLIPBOARD_SEARCH, TOGGLE_FLOATING_KEYBOARD, TOGGLE_TOUCHPAD_MODE, TOGGLE_TEXT_EDIT_MODE, TOGGLE_SELECTION_MODE, HANDWRITING, CLEAR_HANDWRITING, OCR,
         CUSTOM1, CUSTOM2, CUSTOM3, CUSTOM4, CUSTOM5, SWITCH_TO_USER_IME
         -> this
 
@@ -254,7 +255,7 @@ object KeyCode {
      *  Positive codes are passed through, unknown negative codes result in KeyEvent.KEYCODE_UNKNOWN.
      *  To be uses for fake hardware key press.
      */
-    @JvmStatic fun keyCodeToKeyEventCode(keyCode: Int) = when (keyCode) {
+    fun keyCodeToKeyEventCode(keyCode: Int) = when (keyCode) {
         ARROW_UP -> KeyEvent.KEYCODE_DPAD_UP
         ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
         ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
@@ -297,7 +298,7 @@ object KeyCode {
      *  Fallback to KeyEvent.KEYCODE_UNKNOWN.
      *  To be uses for fake hardware key press.
      */
-    @JvmStatic fun codePointToKeyEventCode(codePoint: Int): Int = when (codePoint.toChar().uppercaseChar()) {
+    fun codePointToKeyEventCode(codePoint: Int): Int = when (codePoint.toChar().uppercaseChar()) {
         '/' -> KeyEvent.KEYCODE_SLASH
         '\\' -> KeyEvent.KEYCODE_BACKSLASH
         ';' -> KeyEvent.KEYCODE_SEMICOLON

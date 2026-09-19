@@ -34,7 +34,9 @@ import helium314.keyboard.settings.screens.PersonalDictionaryScreen
 import helium314.keyboard.settings.screens.BlockedWordsScreen
 import helium314.keyboard.settings.screens.PreferencesScreen
 import helium314.keyboard.settings.screens.SecondaryLayoutScreen
+import helium314.keyboard.settings.screens.SoundSettingsScreen
 import helium314.keyboard.settings.screens.SubtypeScreen
+import helium314.keyboard.settings.screens.SuggestionsScreen
 import helium314.keyboard.settings.screens.TextCorrectionScreen
 import helium314.keyboard.settings.screens.ToolbarScreen
 import helium314.keyboard.settings.screens.UpdatesScreen
@@ -75,6 +77,7 @@ fun SettingsNavHost(
                 onClickUpdates = { navController.navigate(SettingsDestination.Updates) },
                 onClickAbout = { navController.navigate(SettingsDestination.About) },
                 onClickTextCorrection = { navController.navigate(SettingsDestination.TextCorrection) },
+                onClickSuggestions = { navController.navigate(SettingsDestination.Suggestions) },
                 onClickPreferences = { navController.navigate(SettingsDestination.Preferences) },
                 onClickToolbar = { navController.navigate(SettingsDestination.Toolbar) },
                 onClickGestureTyping = { navController.navigate(SettingsDestination.GestureTyping) },
@@ -97,6 +100,9 @@ fun SettingsNavHost(
         composable(SettingsDestination.TextCorrection) {
             TextCorrectionScreen(onClickBack = ::goBack)
         }
+        composable(SettingsDestination.Suggestions) {
+            SuggestionsScreen(onClickBack = ::goBack)
+        }
         composable(SettingsDestination.Preferences) {
             PreferencesScreen(onClickBack = ::goBack)
         }
@@ -115,9 +121,19 @@ fun SettingsNavHost(
         composable(SettingsDestination.Libraries) {
             LibrariesHubScreen(
                 onClickBack = ::goBack,
-                onClickDictionaries = { navController.navigate(SettingsDestination.Dictionaries) },
-                onClickOfflineVoice = { navController.navigate(SettingsDestination.OfflineVoice) }
+                onClickOfflineVoice = { navController.navigate(SettingsDestination.OfflineVoice) },
+                onClickTranslation = { navController.navigate(SettingsDestination.Translation) },
+                onClickHandwriting = { navController.navigate(SettingsDestination.Handwriting) },
+                onClickOcr = { navController.navigate(SettingsDestination.OCR) },
+                onClickAIIntegration = { navController.navigate(SettingsDestination.AIIntegration) },
+                onClickSound = { navController.navigate(SettingsDestination.Sound) }
             )
+        }
+        composable(SettingsDestination.Sound) {
+            SoundSettingsScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.OCR) {
+            helium314.keyboard.settings.screens.OcrSettingsScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.CustomAIKeys) {
             CustomAIKeysScreen(
@@ -172,7 +188,8 @@ fun SettingsNavHost(
             ColorsScreen(isNight = true, theme = it.arguments?.getString("theme"), onClickBack = ::goBack)
         }
         composable(SettingsDestination.Subtype + "{subtype}") {
-            SubtypeScreen(initialSubtype = it.arguments?.getString("subtype")!!.toSettingsSubtype(), onClickBack = ::goBack)
+            val subtypeArg = it.arguments?.getString("subtype") ?: ""
+            SubtypeScreen(initialSubtype = subtypeArg.toSettingsSubtype(), onClickBack = ::goBack)
         }
         composable(SettingsDestination.TextExpander) {
             TextExpanderScreen(onClickBack = ::goBack)
@@ -181,7 +198,19 @@ fun SettingsNavHost(
             helium314.keyboard.settings.screens.BackgroundServicesScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.OfflineVoice) {
-            helium314.keyboard.latin.voice.VoiceSettingsScreen(onClickBack = ::goBack)
+            helium314.keyboard.latin.voice.VoiceSettingsScreen(
+                onClickBack = ::goBack,
+                onClickAIIntegration = { navController.navigate(SettingsDestination.AIIntegration) }
+            )
+        }
+        composable(SettingsDestination.Translation) {
+            helium314.keyboard.settings.screens.TranslationSettingsScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.Handwriting) {
+            helium314.keyboard.settings.screens.HandwritingSettingsScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.AppQuirks) {
+            helium314.keyboard.settings.screens.AppQuirksScreen(onClickBack = ::goBack)
         }
     }
     if (target.value != SettingsDestination.Settings/* && target.value != navController.currentBackStackEntry?.destination?.route*/)
@@ -193,6 +222,7 @@ object SettingsDestination {
     const val Updates = "updates"
     const val About = "about"
     const val TextCorrection = "text_correction"
+    const val Suggestions = "suggestions"
     const val Preferences = "preferences"
     const val Toolbar = "toolbar"
     const val GestureTyping = "gesture_typing"
@@ -216,6 +246,11 @@ object SettingsDestination {
     const val TextExpander = "text_expander"
     const val BackgroundServices = "background_services"
     const val OfflineVoice = "offline_voice"
+    const val Translation = "translation"
+    const val Handwriting = "handwriting"
+    const val OCR = "ocr"
+    const val Sound = "sound"
+    const val AppQuirks = "app_quirks"
     val navTarget = MutableStateFlow(Settings)
 
     // Use SupervisorJob so a cancellation in one navigation hop

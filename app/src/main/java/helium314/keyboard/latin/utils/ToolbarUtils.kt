@@ -59,7 +59,10 @@ private val toolbarPrefScope = CoroutineScope(SupervisorJob() + Dispatchers.Defa
 fun createToolbarKey(context: Context, key: ToolbarKey): ImageButton {
     val button = ImageButton(context, null, R.attr.suggestionWordStyle)
     button.scaleType = ImageView.ScaleType.CENTER_INSIDE
-    val padding = 9.dpToPx(context.resources)
+    val defaultStripHeight = context.resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_height).toFloat()
+    val stripHeight = ResourceUtils.getSuggestionsStripHeight(context.resources).toFloat()
+    val effectiveScale = if (defaultStripHeight > 0f) stripHeight / defaultStripHeight else 1.0f
+    val padding = (9 * effectiveScale).toInt().dpToPx(context.resources).coerceAtLeast(2)
     button.setPadding(padding, padding, padding, padding)
     button.tag = key
     button.contentDescription = key.name.lowercase().getStringResourceOrName("", context)
@@ -254,6 +257,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     SPLIT -> KeyCode.SPLIT_LAYOUT
     PROOFREAD -> KeyCode.PROOFREAD
     TRANSLATE -> KeyCode.TRANSLATE
+    OCR -> KeyCode.OCR
     SELECT_MODE -> KeyCode.TOGGLE_SELECTION_MODE
     CUSTOM_AI_1 -> KeyCode.CUSTOM_AI_1
     CUSTOM_AI_2 -> KeyCode.CUSTOM_AI_2
@@ -291,7 +295,7 @@ fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getC
 enum class ToolbarKey {
     VOICE, CLIPBOARD, CLIPBOARD_SEARCH, NUMPAD, HANDWRITING, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, SPLIT, FLOATING,
     INCOGNITO, TOUCHPAD, TEXT_EDIT, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
-    PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, PROOFREAD, TRANSLATE, SELECT_MODE,
+    PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, PROOFREAD, TRANSLATE, OCR, SELECT_MODE,
     CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, CUSTOM_AI_4, CUSTOM_AI_5,
     CUSTOM_AI_6, CUSTOM_AI_7, CUSTOM_AI_8, CUSTOM_AI_9, CUSTOM_AI_10
 }
@@ -302,18 +306,23 @@ enum class ToolbarMode {
 
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
-// ponytail: Split excluded keys into flavor-specific exclusions and main-toolbar-only exclusions to allow clipboard toolbar to render clipboard search and close history.
 private val flavorExcludedKeys by lazy {
     val customAiKeys = if (BuildConfig.FLAVOR != "standard" && BuildConfig.FLAVOR != "standardfull" && BuildConfig.FLAVOR != "offline")
         ToolbarKey.entries.filter { it.name.startsWith("CUSTOM_AI_") }
     else emptyList()
-    val otherKeys = if (BuildConfig.FLAVOR == "offlinelite")
-        listOf(PROOFREAD, TRANSLATE, CLIPBOARD_SEARCH, HANDWRITING)
-    else if (BuildConfig.FLAVOR == "offline" || BuildConfig.FLAVOR == "standard")
-        listOf(HANDWRITING)
-    else
-        emptyList()
-    customAiKeys + otherKeys
+    val otherKeys = mutableListOf<ToolbarKey>()
+    if (BuildConfig.FLAVOR == "offline" && android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+        otherKeys.add(PROOFREAD)
+        otherKeys.addAll(ToolbarKey.entries.filter { it.name.startsWith("CUSTOM_AI_") })
+    }
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+        otherKeys.add(HANDWRITING)
+        otherKeys.add(OCR)
+    }
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) {
+        otherKeys.add(TRANSLATE)
+    }
+    (customAiKeys + otherKeys).distinct()
 }
 
 private val mainToolbarExcludedKeys = listOf(CLOSE_HISTORY, CLIPBOARD_SEARCH)
@@ -324,9 +333,8 @@ private val excludedKeys by lazy {
 
 val defaultToolbarPref by lazy {
     val default = when (helium314.keyboard.latin.BuildConfig.FLAVOR) {
-        "offline" -> listOf(SETTINGS, VOICE, CLIPBOARD, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, INCOGNITO, COPY, PASTE, PROOFREAD, TRANSLATE, TEXT_EDIT)
-        "offlinelite" -> listOf(SETTINGS, VOICE, CLIPBOARD, UNDO, INCOGNITO, COPY, PASTE)
-        else -> listOf(SETTINGS, VOICE, CLIPBOARD, HANDWRITING, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, PROOFREAD, TRANSLATE, INCOGNITO, TOUCHPAD, TEXT_EDIT, FLOATING, NUMPAD, COPY, PASTE, SELECT_ALL, SELECT_MODE)
+        "offline" -> listOf(SETTINGS, VOICE, CLIPBOARD, HANDWRITING, OCR, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, INCOGNITO, COPY, PASTE, PROOFREAD, TRANSLATE, TEXT_EDIT, AUTOCORRECT)
+        else -> listOf(SETTINGS, VOICE, CLIPBOARD, HANDWRITING, OCR, CUSTOM_AI_1, CUSTOM_AI_2, CUSTOM_AI_3, UNDO, PROOFREAD, TRANSLATE, INCOGNITO, TOUCHPAD, TEXT_EDIT, AUTOCORRECT, FLOATING, NUMPAD, COPY, PASTE, SELECT_ALL, SELECT_MODE)
     }
         
     val others = entries.filterNot { it in default || it in excludedKeys }
@@ -335,10 +343,7 @@ val defaultToolbarPref by lazy {
 }
 
 val defaultPinnedToolbarPref by lazy {
-    val pinnedDefault = when (helium314.keyboard.latin.BuildConfig.FLAVOR) {
-        "offlinelite" -> listOf(CLIPBOARD)
-        else -> listOf(CLIPBOARD, PROOFREAD, TOUCHPAD, TEXT_EDIT, FLOATING)
-    }
+    val pinnedDefault = listOf(CLIPBOARD, PROOFREAD, TOUCHPAD, TEXT_EDIT, FLOATING)
 
     entries.filterNot { it in excludedKeys }.joinToString(Separators.ENTRY) {
         it.name + Separators.KV + (it in pinnedDefault)
@@ -361,7 +366,7 @@ fun upgradeToolbarPrefs(prefs: SharedPreferences) {
 
 private fun upgradeToolbarPref(prefs: SharedPreferences, pref: String, default: String) {
     if (!prefs.contains(pref)) return
-    val originalString = prefs.getString(pref, default)!!
+    val originalString = prefs.getString(pref, default) ?: default
     val list = originalString.split(Separators.ENTRY).toMutableList()
     val splitDefault = default.split(Separators.ENTRY)
     splitDefault.forEach { entry ->
@@ -392,7 +397,7 @@ fun getEnabledClipboardToolbarKeys(prefs: SharedPreferences) = getEnabledToolbar
 
 fun addPinnedKey(prefs: SharedPreferences, key: ToolbarKey) {
     // remove the existing version of this key and add the enabled one after the last currently enabled key
-    val string = prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref)!!
+    val string = prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref) ?: defaultPinnedToolbarPref
     val keys = string.split(Separators.ENTRY).toMutableList()
     keys.removeAll { it.startsWith(key.name + Separators.KV) }
     val lastEnabledIndex = keys.indexOfLast { it.endsWith("true") }
@@ -402,7 +407,7 @@ fun addPinnedKey(prefs: SharedPreferences, key: ToolbarKey) {
 
 fun removePinnedKey(prefs: SharedPreferences, key: ToolbarKey) {
     // just set it to disabled
-    val string = prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref)!!
+    val string = prefs.getString(Settings.PREF_PINNED_TOOLBAR_KEYS, defaultPinnedToolbarPref) ?: defaultPinnedToolbarPref
     val result = string.split(Separators.ENTRY).joinToString(Separators.ENTRY) {
         if (it.startsWith(key.name + Separators.KV))
             key.name + Separators.KV + "false"
@@ -412,7 +417,7 @@ fun removePinnedKey(prefs: SharedPreferences, key: ToolbarKey) {
 }
 
 private fun getEnabledToolbarKeys(prefs: SharedPreferences, pref: String, default: String, exclusions: Collection<ToolbarKey> = excludedKeys): List<ToolbarKey> {
-    val string = prefs.getString(pref, default)!!
+    val string = prefs.getString(pref, default) ?: default
     return string.split(Separators.ENTRY).mapNotNull {
         val split = it.split(Separators.KV)
         if (split.last() == "true") {
@@ -433,7 +438,7 @@ fun writeCustomKeyCodes(prefs: SharedPreferences, codes: EnumMap<ToolbarKey, Pai
 
 fun readCustomKeyCodes(prefs: SharedPreferences): EnumMap<ToolbarKey, Pair<Int?, Int?>> {
     val map = EnumMap<ToolbarKey, Pair<Int?, Int?>>(ToolbarKey::class.java)
-    prefs.getString(Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES, Defaults.PREF_TOOLBAR_CUSTOM_KEY_CODES)!!
+    (prefs.getString(Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES, Defaults.PREF_TOOLBAR_CUSTOM_KEY_CODES) ?: Defaults.PREF_TOOLBAR_CUSTOM_KEY_CODES)
         .split(";").forEach {
             runCatching {
                 val s = it.split(",")
@@ -444,15 +449,13 @@ fun readCustomKeyCodes(prefs: SharedPreferences): EnumMap<ToolbarKey, Pair<Int?,
 }
 
 fun getCustomKeyCode(key: ToolbarKey, prefs: SharedPreferences): Int? {
-    if (customToolbarKeyCodes == null)
-        customToolbarKeyCodes = readCustomKeyCodes(prefs)
-    return customToolbarKeyCodes!![key]?.first
+    val codes = customToolbarKeyCodes ?: readCustomKeyCodes(prefs).also { customToolbarKeyCodes = it }
+    return codes[key]?.first
 }
 
 fun getCustomLongpressKeyCode(key: ToolbarKey, prefs: SharedPreferences): Int? {
-    if (customToolbarKeyCodes == null)
-        customToolbarKeyCodes = readCustomKeyCodes(prefs)
-    return customToolbarKeyCodes!![key]?.second
+    val codes = customToolbarKeyCodes ?: readCustomKeyCodes(prefs).also { customToolbarKeyCodes = it }
+    return codes[key]?.second
 }
 
 fun clearCustomToolbarKeyCodes() {
@@ -523,13 +526,31 @@ class LongPressHintDrawable(private val base: Drawable) : Drawable() {
     }
 
     override fun draw(canvas: Canvas) {
-        base.draw(canvas)
         val bounds = bounds
-        val radius = bounds.height() * 0.05f
-        val cx = bounds.right.toFloat() - radius * 3f
-        val cy = bounds.bottom.toFloat() - radius * 3f
-        hintPaint.color = Settings.getValues().mColors.get(ColorType.CLIPBOARD_PIN)
-        canvas.drawCircle(cx, cy, radius, hintPaint)
+        val h = bounds.height().toFloat()
+        val w = bounds.width().toFloat()
+        if (h <= 0f || w <= 0f) return
+
+        val shiftY = (h * 0.08f).coerceAtLeast(2f).toInt()
+        base.setBounds(bounds.left, bounds.top - shiftY, bounds.right, bounds.bottom - shiftY)
+        base.draw(canvas)
+        base.bounds = bounds
+
+        val pillWidth = (w * 0.28f).coerceIn(10f, 32f)
+        val pillHeight = (h * 0.07f).coerceIn(3f, 7f)
+        val cornerRadius = pillHeight / 2f
+        val cx = bounds.exactCenterX()
+        val cy = bounds.bottom.toFloat() - pillHeight / 2f + 1f
+
+        val left = cx - pillWidth / 2f
+        val top = cy - pillHeight / 2f
+        val right = cx + pillWidth / 2f
+        val bottom = cy + pillHeight / 2f
+
+        val baseColor = Settings.getValues().mColors.get(ColorType.CLIPBOARD_PIN)
+        val alpha25 = (Color.alpha(baseColor) * 0.25f).toInt()
+        hintPaint.color = (alpha25 shl 24) or (baseColor and 0x00FFFFFF)
+        canvas.drawRoundRect(left, top, right, bottom, cornerRadius, cornerRadius, hintPaint)
     }
 
     override fun onBoundsChange(bounds: Rect) {
@@ -539,7 +560,7 @@ class LongPressHintDrawable(private val base: Drawable) : Drawable() {
 
     override fun setAlpha(alpha: Int) {
         base.alpha = alpha
-        hintPaint.alpha = (alpha * 0.5f).toInt()
+        hintPaint.alpha = (alpha * 0.25f).toInt()
     }
 
     override fun setColorFilter(colorFilter: ColorFilter?) {

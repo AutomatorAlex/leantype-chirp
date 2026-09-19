@@ -1,0 +1,4 @@
+- Ultra-Lightweight APKs: Unbundled dictionaries across all flavors in favor of on-demand downloads via DictManager.
+- Modular Offline AI Dynamic Plugin: Decoupled local GGUF AI engine into a standalone dynamic plugin (LeanType-Offline-AI-Plugin).
+- Instant Offline Translation Hot-Reload: Direct filesystem inspection and proactive cache invalidation for seamless model imports.
+- Refined Setup Wizard & Unified Plugins Hub: Modernized Welcome Wizard and integrated Offline AI into Plugins Hub.

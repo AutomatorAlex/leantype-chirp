@@ -64,12 +64,12 @@ object Defaults {
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
     const val PREF_THEME_STYLE = KeyboardTheme.STYLE_ROUNDED
     const val PREF_ICON_STYLE = KeyboardTheme.STYLE_ROUNDED
-    @JvmField
     val PREF_THEME_COLORS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) KeyboardTheme.THEME_DYNAMIC else KeyboardTheme.THEME_LIGHT
-    @JvmField
     val PREF_THEME_COLORS_NIGHT = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) KeyboardTheme.THEME_DYNAMIC else KeyboardTheme.THEME_DARK
     const val PREF_THEME_KEY_BORDERS = true
-    @JvmField
+    const val PREF_KEY_BORDER_RADIUS = 10f
+    const val PREF_KEY_BORDER_RADIUS_FUNCTIONAL = 25f
+    const val PREF_KEY_BORDER_RADIUS_ACTION = 25f
     val PREF_THEME_DAY_NIGHT = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     const val PREF_CUSTOM_ICON_NAMES = ""
     const val PREF_TOOLBAR_CUSTOM_KEY_CODES = ""
@@ -80,9 +80,11 @@ object Defaults {
     const val PREF_SUGGEST_EMOJIS = true
     const val PREF_INLINE_EMOJI_SEARCH = true
     const val PREF_SHOW_EMOJI_DESCRIPTIONS = true
-    @JvmField
     var PREF_POPUP_ON = true
     const val PREF_AUTO_CORRECTION = false
+    const val PREF_AUTO_CORRECT_AGGRESSIVENESS = 2
+    const val PREF_EXPAND_FINE_TUNE_AUTOCORRECT = false
+    const val PREF_EXPAND_FINE_TUNE_PREDICTION = false
     const val PREF_AUTO_CORRECT_TRIGGER = "both"
     const val PREF_MORE_AUTO_CORRECTION = false
     const val PREF_AUTO_CORRECT_THRESHOLD = 0.185f
@@ -101,7 +103,7 @@ object Defaults {
     const val PREF_APP_LANGUAGE = ""
     const val PREF_SHOW_EMOJI_KEY = false
     const val PREF_VARIABLE_TOOLBAR_DIRECTION = true
-    const val PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD = false
+    const val PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD = true
     const val PREF_PHYSICAL_KEYBOARD_SUGGESTION_SHORTCUTS = "alt"
     const val PREF_ADDITIONAL_SUBTYPES = "de${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwerty${Separators.SETS}" +
             "fr${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwertz${Separators.SETS}" +
@@ -109,17 +111,14 @@ object Defaults {
     const val PREF_ENABLE_SPLIT_KEYBOARD = false
     const val PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE = false
     const val PREF_PERSIST_FLOATING_KEYBOARD = false
+    const val PREF_REMEMBER_FLOATING_KEYBOARD = false
     // ponytail: persist text edit mode default
     const val PREF_PERSIST_TEXT_EDIT_MODE = false
     // ponytail: default value to disable multi-word suggestions is false
     const val PREF_DISABLE_MULTI_WORD_SUGGESTIONS = false
-    @JvmField
     val PREF_SPLIT_SPACER_SCALE = Array(2) { DEFAULT_SIZE_SCALE }
-    @JvmField
     val PREF_KEYBOARD_HEIGHT_SCALE = arrayOf(0.77f, 0.45f)
-    @JvmField
     val PREF_BOTTOM_PADDING_SCALE = arrayOf(1.05f, 0f)
-    @JvmField
     val PREF_SIDE_PADDING_SCALE = Array(4) { 0.15f }
     const val PREF_FONT_SCALE = 0.85f
     const val PREF_EMOJI_FONT_SCALE = DEFAULT_SIZE_SCALE
@@ -138,6 +137,7 @@ object Defaults {
     const val PREF_ALWAYS_INCOGNITO_MODE = false
     const val PREF_BIGRAM_PREDICTIONS = true
     const val PREF_PRIORITIZE_PERSONAL_SUGGESTIONS = false
+    const val PREF_SUGGESTION_BALANCE = 3
     const val PREF_NEXT_WORD_BOOST_LEVEL = "500"
     const val PREF_NEXT_WORD_STRICT_NGRAM = false
     const val PREF_IMMEDIATE_AUTO_SPACE = false
@@ -148,18 +148,29 @@ object Defaults {
     const val PREF_COMPRESS_SCREENSHOTS = true
     const val PREF_AUTO_READ_OTP = false
     const val PREF_OTP_ALLOWED_SMS_PACKAGE = ""
+    const val PREF_INLINE_MATH_CALCULATION = true
     const val PREF_GESTURE_INPUT = true
     // ponytail: gesture method default value
     const val PREF_GESTURE_METHOD = "fallback"
     const val PREF_VIBRATION_DURATION_SETTINGS = -1
     const val PREF_VIBRATION_AMPLITUDE_SETTINGS = -1
     const val PREF_KEYPRESS_SOUND_VOLUME = -0.01f
+    const val PREF_KEYPRESS_SOUND_STYLE = "system"
+    const val PREF_SOUND_PITCH_SCALE = 1.0f
+    const val PREF_SOUND_RANDOM_PITCH = true
+    const val PREF_SOUND_STEREO_PAN = true
+    const val PREF_SOUND_DYNAMIC_VELOCITY = false
+    const val PREF_SOUND_MUTE_IN_SILENT = true
+    const val PREF_SOUND_MUTE_IN_DND = true
+    const val PREF_SOUND_VOL_SPACE = 1.0f
+    const val PREF_SOUND_VOL_DELETE = 1.0f
+    const val PREF_SOUND_VOL_ENTER = 1.0f
+    const val PREF_SOUND_VOL_MODIFIERS = 1.0f
     const val PREF_KEY_LONGPRESS_TIMEOUT = 300
     const val PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY = true
     const val PREF_GESTURE_PREVIEW_TRAIL = true
     const val PREF_GESTURE_FLOATING_PREVIEW_TEXT = true
     const val PREF_GESTURE_FLOATING_PREVIEW_DYNAMIC = true
-    @JvmField
     var PREF_GESTURE_DYNAMIC_PREVIEW_FOLLOW_SYSTEM = true
     const val PREF_GESTURE_SPACE_AWARE = false
     const val PREF_GESTURE_FAST_TYPING_COOLDOWN = 500
@@ -200,14 +211,14 @@ object Defaults {
     const val PREF_OFFLINE_TRANSLATE_TARGET_LANGUAGE = "French"
     const val PREF_OFFLINE_KEEP_MODEL_LOADED = false
     const val PREF_AI_ALLOW_INSECURE_CONNECTIONS = false
+    const val PREF_CLOUD_AI_MAX_TOKENS = 4096
     const val PREF_ENABLE_CLIPBOARD_HISTORY = true
     const val PREF_CLIPBOARD_HISTORY_RETENTION_TIME = 15 // minutes
     const val PREF_CLIPBOARD_HISTORY_PINNED_FIRST = true
     const val PREF_CLIPBOARD_FOLD_PINNED = false
     const val PREF_CLEAR_CLIPBOARD_ICON = "bin"
-    const val PREF_ADD_TO_PERSONAL_DICTIONARY = true
-    const val PREF_ADD_TO_PERSONAL_DICT_THRESHOLD = 2
-    @JvmField
+    const val PREF_ADD_TO_PERSONAL_DICTIONARY = false
+    const val PREF_ADD_TO_PERSONAL_DICT_THRESHOLD = 6
     val PREF_NAVBAR_COLOR = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     const val PREF_NARROW_KEY_GAPS = true
     const val PREF_NARROW_KEY_GAPS_LEVEL = 1
@@ -225,6 +236,7 @@ object Defaults {
     const val PREF_AUTO_SHOW_TOOLBAR = false
     const val PREF_AUTO_SHOW_TOOLBAR_ON_SELECT = false
     const val PREF_AUTO_HIDE_TOOLBAR = true
+    const val PREF_AUTO_SHOW_TOOLBAR_NO_SUGGESTIONS = false
     const val PREF_TOOLBAR_SWIPE_DOWN_DISMISS = false
     const val PREF_AUTO_HIDE_PINNED_KEYS = true
     const val PREF_REMEMBER_TOOLBAR_STATE = false

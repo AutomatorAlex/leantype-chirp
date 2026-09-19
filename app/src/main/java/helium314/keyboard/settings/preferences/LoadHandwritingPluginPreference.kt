@@ -40,6 +40,7 @@ import helium314.keyboard.settings.FeedbackManager
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.filePicker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -53,6 +54,7 @@ fun LoadHandwritingPluginPreference(
     title: String,
     summary: String? = null,
     @DrawableRes icon: Int? = null,
+    restartOnSuccess: Boolean = true,
     onSuccess: (() -> Unit)? = null,
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
@@ -64,10 +66,18 @@ fun LoadHandwritingPluginPreference(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val hasInternet = remember {
+        ctx.packageManager.checkPermission(
+            "android.permission.INTERNET",
+            ctx.packageName
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     val hasPlugin = HandwritingLoader.hasPlugin(ctx)
     val localVersion = remember(hasPlugin) { HandwritingLoader.getPluginVersion(ctx) }
 
     LaunchedEffect(hasPlugin) {
+        if (!hasInternet) return@LaunchedEffect
         isCheckingUpdate = true
         scope.launch(Dispatchers.IO) {
             try {
@@ -99,54 +109,44 @@ fun LoadHandwritingPluginPreference(
         val success = HandwritingLoader.importPlugin(ctx, uri)
         showDialog = false
         if (success) {
-            FeedbackManager.message(ctx, R.string.load_handwriting_plugin_success)
+            FeedbackManager.message(ctx, "Handwriting plugin loaded. Restarting...")
             onSuccess?.invoke()
+            if (restartOnSuccess) {
+                scope.launch {
+                    delay(2000)
+                    Runtime.getRuntime().exit(0)
+                }
+            }
         } else {
             FeedbackManager.message(ctx, R.string.load_handwriting_plugin_failed)
         }
     }
 
     fun startDownload() {
+        if (!hasInternet) {
+            showDialog = false
+            val url = "https://github.com/LeanBitLab/Leantype-Handwriting-Plugin/releases"
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            try {
+                ctx.startActivity(intent)
+                Toast.makeText(ctx, "Opening GitHub releases in browser… download the APK and use 'Load from file'", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "Failed to open browser: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         isDownloading = true
         scope.launch(Dispatchers.IO) {
             try {
                 val tag = remoteVersion ?: "latest"
-                val urlStr = if (tag == "latest") {
-                    "https://github.com/LeanBitLab/Leantype-Handwriting-Plugin/releases/latest/download/handwriting_plugin.apk"
-                } else {
-                    "https://github.com/LeanBitLab/Leantype-Handwriting-Plugin/releases/download/$tag/handwriting_plugin.apk"
-                }
-                var url = URL(urlStr)
-                var conn = url.openConnection() as HttpURLConnection
-                conn.instanceFollowRedirects = true
-                conn.setRequestProperty("User-Agent", "HeliboardL")
-                conn.connect()
-
-                var redirectConn = conn
-                var status = redirectConn.responseCode
-                var redirectCount = 0
-                while ((status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == HttpURLConnection.HTTP_SEE_OTHER) && redirectCount < 5) {
-                    val newUrl = redirectConn.getHeaderField("Location")
-                    redirectConn.disconnect()
-                    val nextUrl = URL(newUrl)
-                    redirectConn = nextUrl.openConnection() as HttpURLConnection
-                    redirectConn.setRequestProperty("User-Agent", "HeliboardL")
-                    redirectConn.connect()
-                    status = redirectConn.responseCode
-                    redirectCount++
-                }
-
-                if (status != HttpURLConnection.HTTP_OK) {
-                    throw IOException("Server returned HTTP $status")
-                }
-
                 val tempFile = File(ctx.cacheDir, "temp_handwriting_plugin.apk")
-                redirectConn.inputStream.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
+                val downloaded = HandwritingLoader.downloadPluginApk(ctx, tag, tempFile)
+                if (!downloaded) {
+                    throw IOException("Failed to download handwriting plugin APK")
                 }
-                redirectConn.disconnect()
 
                 val success = HandwritingLoader.importPlugin(ctx, Uri.fromFile(tempFile))
                 tempFile.delete()
@@ -154,9 +154,15 @@ fun LoadHandwritingPluginPreference(
                 withContext(Dispatchers.Main) {
                     isDownloading = false
                     if (success) {
-                        FeedbackManager.message(ctx, R.string.load_handwriting_plugin_success)
+                        FeedbackManager.message(ctx, "Handwriting plugin loaded. Restarting...")
                         onSuccess?.invoke()
                         showDialog = false
+                        if (restartOnSuccess) {
+                            scope.launch {
+                                delay(2000)
+                                Runtime.getRuntime().exit(0)
+                            }
+                        }
                     } else {
                         FeedbackManager.message(ctx, R.string.load_handwriting_plugin_failed)
                     }
@@ -233,9 +239,15 @@ fun LoadHandwritingPluginPreference(
                             Button(
                                 onClick = {
                                     HandwritingLoader.removePlugin(ctx)
-                                    FeedbackManager.message(ctx, "Handwriting plugin removed")
+                                    FeedbackManager.message(ctx, "Handwriting plugin removed. Restarting...")
                                     onSuccess?.invoke()
                                     showDialog = false
+                                    if (restartOnSuccess) {
+                                        scope.launch {
+                                            delay(2000)
+                                            Runtime.getRuntime().exit(0)
+                                        }
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.error,

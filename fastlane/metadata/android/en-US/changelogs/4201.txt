@@ -1,0 +1,7 @@
+- 100% Kotlin Migration: Converted all 430 Java source files to idiomatic Kotlin with zero Java files remaining in the application layer.
+- Appearance: Added independent Key & Functional Corner Radius sliders for bordered keys with theme-default preservation.
+- Suggestion Engine: Added user dictionary authority, smart contextual gating, and instant session typo eviction on backspace.
+- OCR Text Scanner: Defaulted OCR recognition to Latin for faster text extraction, and improved camera viewfinder lifecycle & back-press handling.
+- Input & Auto-Caps: Fixed selection deletion cache desync, restored auto-caps after backspace, and fixed mid-sentence auto-caps (#448, #482).
+- Foldable & Hardware Keyboard: Fixed layout sizing on folded screens (#400) and stabilized Ctrl+Space / Shift+Space language switching (#444).
+- Compatibility & Polish: Guarded voice input on Android <= 8.1, improved AI error handling (#492), and instant clipboard toolbar sync (#493).

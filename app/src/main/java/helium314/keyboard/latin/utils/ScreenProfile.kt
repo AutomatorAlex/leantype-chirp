@@ -21,7 +21,6 @@ object ScreenProfileProvider {
     private var cachedProfile: ScreenProfile? = null
     private var cachedConfigHash: Int = 0
 
-    @JvmStatic
     @JvmOverloads
     fun getScreenProfile(
         context: Context,
@@ -48,6 +47,7 @@ object ScreenProfileProvider {
 
         val profile = when {
             availableWidthDp >= 600 -> ScreenProfile.LARGE
+            availableWidthDp > 0 -> ScreenProfile.COMPACT
             config.smallestScreenWidthDp >= 600 -> ScreenProfile.LARGE
             else -> ScreenProfile.COMPACT
         }
@@ -59,7 +59,6 @@ object ScreenProfileProvider {
         return profile
     }
 
-    @JvmStatic
     fun invalidateCache() {
         cachedProfile = null
         cachedConfigHash = 0

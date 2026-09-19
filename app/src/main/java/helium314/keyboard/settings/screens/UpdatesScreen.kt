@@ -72,13 +72,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 private val currentChangelogItems = listOf(
-    "🎙️ Migrated offline voice typing to Whisper AI with compact Q5_1 models and in-toolbar waveform visualizer",
-    "🌐 Added Voice Recognition Language selector with Auto-Detect, Follow Keyboard Language, and 99+ Whisper languages",
-    "🚀 Added in-app streaming self-updater (standardfull), collapsible changelog, and official community links",
-    "🧠 Added Personal Dictionary auto-learn frequency threshold slider in Settings -> Text Correction",
-    "🎨 Added Toolbar & Clipboard key alignment setting (Start, Center, End, Auto-Span)",
-    "⚡ Added N-gram backoff and cache safeguards for continuous next-word predictions",
-    "🎨 Isolated key border theme setting strictly to keyboard letter keys"
+    "• Hardware Keyboard Overhaul: Restored suggestions, autocorrect, and typing composition on physical keyboards; resolved NumLock bypass and dead-key crashes",
+    "• App Profiles & Quirks Engine: Added offline per-app compatibility configuration with direct commit, auto-space overrides, and per-app autocorrect toggles",
+    "• Calibrated Cursor Gestures: Eliminated cursor jumping, jitter, and overshoot during vertical swipe-up and spacebar touchpad scrolling",
+    "• Settings Overhaul: Separated Suggestions and Text Correction into distinct categories with coordinated preset sliders and fine-tuning drawers",
+    "• UI Polish & Stability: Polished gesture floating preview and screenshot suggestions, unified voice routing, and fixed non-English dictionary crash"
 )
 
 @Composable
@@ -311,7 +309,7 @@ fun UpdatesScreen(
                     .padding(innerPadding)
                     .padding(vertical = 8.dp)
             ) {
-                // Section 1: App Updates (OMITTED entirely on offline / offlinelite flavors)
+                // Section 1: App Updates (OMITTED entirely on offline flavor)
                 if (isOnlineFlavor) {
                     // Minimal Update Indicator Banner if update is available
                     if (isUpdateAvailable && latestVersionTag != null) {
@@ -371,10 +369,12 @@ fun UpdatesScreen(
                                             Button(
                                                 onClick = {
                                                     val localApk = downloadedApkFile
+                                                    val apkUrl = downloadApkUrl
+                                                    val versionTag = latestVersionTag
                                                     if (localApk != null && localApk.exists()) {
                                                         installApk(localApk)
-                                                    } else if (downloadApkUrl != null) {
-                                                        startDownload(downloadApkUrl!!, latestVersionTag!!)
+                                                    } else if (apkUrl != null && versionTag != null) {
+                                                        startDownload(apkUrl, versionTag)
                                                     } else {
                                                         val intent = Intent(Intent.ACTION_VIEW, Links.GITHUB_RELEASES_PAGE.toUri())
                                                         context.startActivity(intent)
@@ -385,7 +385,7 @@ fun UpdatesScreen(
                                                     containerColor = MaterialTheme.colorScheme.primary
                                                 )
                                             ) {
-                                                val btnText = if (downloadedApkFile != null && downloadedApkFile!!.exists()) "Install Now" else "Download & Install"
+                                                val btnText = if (downloadedApkFile?.exists() == true) "Install Now" else "Download & Install"
                                                 Text(btnText, fontWeight = FontWeight.Bold)
                                             }
                                         } else {
@@ -415,9 +415,10 @@ fun UpdatesScreen(
                     ) {
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             val currentVersionText = "Installed: v${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})"
+                            val status = updateCheckStatus
                             val checkDescription = when {
                                 isCheckingUpdates -> stringResource(R.string.updates_checking)
-                                updateCheckStatus != null -> updateCheckStatus!!
+                                status != null -> status
                                 else -> currentVersionText
                             }
 

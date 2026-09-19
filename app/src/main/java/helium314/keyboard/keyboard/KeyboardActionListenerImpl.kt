@@ -14,6 +14,7 @@ import helium314.keyboard.event.HardwareKeyboardEventDecoder
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.AudioAndHapticFeedbackManager
 import helium314.keyboard.latin.EmojiAltPhysicalKeyDetector
+import helium314.keyboard.latin.LastComposedWord
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.RichInputMethodManager
@@ -67,11 +68,26 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         keyboardSwitcher.onReleaseKey(primaryCode, withSliding, latinIME.currentAutoCapsState, latinIME.currentRecapitalizeState)
     }
 
+    private val mConsumedPhysicalKeys = HashSet<Int>()
+
+    private fun isUnhandledNavigationKey(keyCode: Int): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_PAGE_UP,
+        KeyEvent.KEYCODE_PAGE_DOWN,
+        KeyEvent.KEYCODE_MOVE_HOME,
+        KeyEvent.KEYCODE_MOVE_END,
+        KeyEvent.KEYCODE_TAB,
+        KeyEvent.KEYCODE_FORWARD_DEL -> true
+        else -> false
+    }
+
     override fun onKeyUp(keyCode: Int, keyEvent: KeyEvent): Boolean {
         emojiAltPhysicalKeyDetector.onKeyUp(keyEvent)
         if (!ProductionFlags.IS_HARDWARE_KEYBOARD_SUPPORTED)
             return false
 
+        if (mConsumedPhysicalKeys.remove(keyCode)) {
+            return true
+        }
         return false
     }
 
@@ -79,6 +95,18 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         emojiAltPhysicalKeyDetector.onKeyDown(keyEvent)
         if (!ProductionFlags.IS_HARDWARE_KEYBOARD_SUPPORTED)
             return false
+
+        if (keyboardSwitcher.isShowingEmojiPalettes) {
+            val emojiPalettesView = keyboardSwitcher.emojiPalettesView
+            if (emojiPalettesView != null && emojiPalettesView.onHardwareKeyEvent(keyCode, keyEvent)) {
+                mConsumedPhysicalKeys.add(keyCode)
+                return true
+            }
+        }
+
+        if (isUnhandledNavigationKey(keyCode) && inputLogic.isComposingWord) {
+            inputLogic.finishInput()
+        }
 
         val mode = settings.current.mPhysicalKeyboardSuggestionShortcuts
         if (mode != "disabled" && keyCode >= KeyEvent.KEYCODE_1 && keyCode <= KeyEvent.KEYCODE_9) {
@@ -91,7 +119,10 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             }
             if (isMatchingTrigger) {
                 val picked = keyboardSwitcher.suggestionStripView?.pickSuggestionByVisualPosition(visualPos) ?: false
-                if (picked) return true
+                if (picked) {
+                    mConsumedPhysicalKeys.add(keyCode)
+                    return true
+                }
             }
         }
 
@@ -106,11 +137,8 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         }
 
         if (event.isHandled) {
-            inputLogic.onCodeInput(
-                settings.current, event,
-                keyboardSwitcher.getKeyboardShiftMode(), // TODO: this is not necessarily correct for a hardware keyboard right now
-                latinIME.mHandler
-            )
+            latinIME.onEvent(event)
+            mConsumedPhysicalKeys.add(keyCode)
             return true
         }
         return false
@@ -160,6 +188,14 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
                 }
                 return
             }
+            KeyCode.OCR -> {
+                if (keyboardSwitcher.isOcrShowing) {
+                    keyboardSwitcher.hideOcrPanels()
+                } else {
+                    keyboardSwitcher.showOcrCamera()
+                }
+                return
+            }
             KeyCode.TOGGLE_AUTOCORRECT -> return settings.toggleAutoCorrect()
             KeyCode.TOGGLE_INCOGNITO_MODE -> {
                 settings.toggleAlwaysIncognitoMode()
@@ -204,7 +240,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             KeyCode.SHIFT -> {
                 if (keyboardSwitcher.keyboard?.mId?.mElementId == KeyboardId.ELEMENT_TEXT_EDIT || sPersistentTextEditModeActive) {
                     if (inputLogic.connection.hasSelection()) {
-                        inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                        inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false), keyboardSwitcher.keyboardShiftMode, latinIME.mHandler)
                     } else {
                         sPersistentSelectionModeActive = !sPersistentSelectionModeActive
                         keyboardSwitcher.mainKeyboardView?.invalidateAllKeys()
@@ -215,7 +251,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             KeyCode.CAPS_LOCK -> {
                 if (keyboardSwitcher.keyboard?.mId?.mElementId == KeyboardId.ELEMENT_TEXT_EDIT || sPersistentTextEditModeActive) {
                     if (inputLogic.connection.hasSelection()) {
-                        inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                        inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false), keyboardSwitcher.keyboardShiftMode, latinIME.mHandler)
                     } else {
                         sPersistentSelectionModeActive = true
                         keyboardSwitcher.mainKeyboardView?.invalidateAllKeys()
@@ -238,12 +274,14 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
                 return
             }
             KeyCode.CLIPBOARD_COPY_ALL -> {
-                inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_SELECT_ALL, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
-                inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_COPY, 0, 0, 0, false), keyboardSwitcher.getKeyboardShiftMode(), latinIME.mHandler)
+                inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_SELECT_ALL, 0, 0, 0, false), keyboardSwitcher.keyboardShiftMode, latinIME.mHandler)
+                inputLogic.onCodeInput(settings.current, Event.createSoftwareKeypressEvent(KeyCode.CLIPBOARD_COPY, 0, 0, 0, false), keyboardSwitcher.keyboardShiftMode, latinIME.mHandler)
                 return
             }
         }
         val mkv = keyboardSwitcher.mainKeyboardView
+        val keyX = mkv?.getKeyX(x) ?: x
+        val keyY = mkv?.getKeyY(y) ?: y
 
         val isEditingNav = primaryCode == KeyCode.WORD_LEFT || primaryCode == KeyCode.WORD_RIGHT
                 || primaryCode == KeyCode.MOVE_START_OF_PAGE || primaryCode == KeyCode.MOVE_END_OF_PAGE
@@ -257,9 +295,9 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
 
         // checking if the character is a combining accent
         val event = if (primaryCode in combiningRange) { // todo: should this be done later, maybe in inputLogic?
-            Event.createSoftwareDeadEvent(primaryCode, 0, eventMetaState, mkv.getKeyX(x), mkv.getKeyY(y), null)
+            Event.createSoftwareDeadEvent(primaryCode, 0, eventMetaState, keyX, keyY, null)
         } else {
-            Event.createSoftwareKeypressEvent(primaryCode, eventMetaState, mkv.getKeyX(x), mkv.getKeyY(y), isKeyRepeat)
+            Event.createSoftwareKeypressEvent(primaryCode, eventMetaState, keyX, keyY, isKeyRepeat)
         }
         latinIME.onEvent(event)
         metaAfterCodeInput(primaryCode)
@@ -271,9 +309,9 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
 
     override fun onStartBatchInput() = latinIME.onStartBatchInput()
 
-    override fun onUpdateBatchInput(batchPointers: InputPointers?) = latinIME.onUpdateBatchInput(batchPointers)
+    override fun onUpdateBatchInput(batchPointers: InputPointers) = latinIME.onUpdateBatchInput(batchPointers)
 
-    override fun onEndBatchInput(batchPointers: InputPointers?) = latinIME.onEndBatchInput(batchPointers)
+    override fun onEndBatchInput(batchPointers: InputPointers) = latinIME.onEndBatchInput(batchPointers)
 
     override fun onCancelBatchInput() = latinIME.onCancelBatchInput()
 
@@ -288,11 +326,18 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             return latinIME.showInputPickerDialog()
         }
         if (requestCode == KeyboardActionListener.CODE_TOUCHPAD_ON) {
-            keyboardSwitcher.getMainKeyboardView()?.alpha = 0.5f
+            isSpaceSwipeActive = true
+            latinIME.isCursorGestureActive = true
+            latinIME.mHandler.cancelResumeSuggestions()
+            inputLogic.finishInput()
+            keyboardSwitcher.mainKeyboardView?.alpha = 0.5f
             return true
         }
         if (requestCode == KeyboardActionListener.CODE_TOUCHPAD_OFF) {
-            keyboardSwitcher.getMainKeyboardView()?.alpha = 1.0f
+            isSpaceSwipeActive = false
+            latinIME.isCursorGestureActive = false
+            inputLogic.restartSuggestionsOnWordTouchedByCursor(settings.current)
+            keyboardSwitcher.mainKeyboardView?.alpha = 1.0f
             return true
         }
         return false
@@ -315,6 +360,10 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         }
         KeyboardActionListener.SWIPE_TOUCHPAD_MODE -> {
             // Activate touchpad mode - the actual cursor movement will be handled in PointerTracker
+            isSpaceSwipeActive = true
+            latinIME.isCursorGestureActive = true
+            latinIME.mHandler.cancelResumeSuggestions()
+            inputLogic.finishInput()
             PointerTracker.setTouchpadModeActive(true)
             true
         }
@@ -324,8 +373,9 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     override fun onEndSpaceSwipe(){
         initialSubtype = null
         subtypeSwitchCount = 0
-        if (isSpaceSwipeActive) {
+        if (isSpaceSwipeActive || latinIME.isCursorGestureActive) {
             isSpaceSwipeActive = false
+            latinIME.isCursorGestureActive = false
             inputLogic.restartSuggestionsOnWordTouchedByCursor(settings.current)
         }
     }
@@ -376,6 +426,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
 
     override fun resetMetaState() {
         metaState = 0
+        mConsumedPhysicalKeys.clear()
     }
 
     private fun onLanguageSlide(steps: Int): Boolean {
@@ -408,6 +459,12 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
 
     private fun onMoveCursorVertically(steps: Int): Boolean {
         if (steps == 0) return false
+        if (!isSpaceSwipeActive) {
+            isSpaceSwipeActive = true
+            latinIME.isCursorGestureActive = true
+            latinIME.mHandler.cancelResumeSuggestions()
+            inputLogic.finishInput()
+        }
         val code = if (steps < 0) {
             gestureMoveBackHaptics()
             KeyCode.ARROW_UP
@@ -415,7 +472,9 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             gestureMoveForwardHaptics()
             KeyCode.ARROW_DOWN
         }
-        onCodeInput(code, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+        repeat(abs(steps)) {
+            onCodeInput(code, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+        }
         return true
     }
 
@@ -427,6 +486,8 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
 
         if (!isSpaceSwipeActive) {
             isSpaceSwipeActive = true
+            latinIME.isCursorGestureActive = true
+            latinIME.mHandler.cancelResumeSuggestions()
             inputLogic.finishInput()
         }
 
@@ -639,15 +700,22 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
                 PointerTracker.sPersistentTouchpadModeActive = false
                 keyboardSwitcher.hideTouchpadView()
             }
+            override fun onStartDragging() {
+                latinIME.isCursorGestureActive = true
+                latinIME.mHandler.cancelResumeSuggestions()
+                inputLogic.finishInput()
+            }
+            override fun onStopDragging() {
+                latinIME.isCursorGestureActive = false
+                inputLogic.restartSuggestionsOnWordTouchedByCursor(settings.current)
+            }
         })
     }
 
 
 
     companion object {
-        @JvmField
         var sPersistentTextEditModeActive = false
-        @JvmField
         var sPersistentSelectionModeActive = false
         private enum class MetaPressState {
             UNSET, // default state, not active
